@@ -383,7 +383,197 @@
     ctx.restore();
   }
 
-  function drawArenaBackground() {
+  const DEAD_TREES = [
+    { x: 140, y: 220, scale: 1.0, rot: -0.06 },
+    { x: 820, y: 195, scale: 0.85, rot: 0.08 },
+    { x: 720, y: 480, scale: 0.95, rot: -0.04 },
+  ];
+
+  function drawDeadTree(x, y, scale, rot) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(rot);
+    ctx.scale(scale, scale);
+
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.beginPath();
+    ctx.ellipse(2, 4, 20, 6, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = '#1c1512';
+    ctx.lineCap = 'round';
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(0, 4);
+    ctx.lineTo(-2, -34);
+    ctx.stroke();
+
+    ctx.strokeStyle = '#241a16';
+    ctx.lineWidth = 3;
+    const branches = [
+      [-2, -34, -20, -50],
+      [-2, -34, 12, -46],
+      [-20, -50, -30, -62],
+      [-20, -50, -10, -64],
+      [12, -46, 24, -58],
+    ];
+    for (const [x1, y1, x2, y2] of branches) {
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function drawCrypt(x, y) {
+    ctx.save();
+    ctx.translate(x, y);
+
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.beginPath();
+    ctx.ellipse(4, 34, 46, 12, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    const grad = ctx.createLinearGradient(-40, -46, 40, 30);
+    grad.addColorStop(0, '#39323f');
+    grad.addColorStop(1, '#120d16');
+    ctx.fillStyle = grad;
+    ctx.strokeStyle = '#5c4a34';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.rect(-40, -20, 80, 50);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(-46, -20);
+    ctx.lineTo(0, -46);
+    ctx.lineTo(46, -20);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = 'rgba(0,0,0,0.75)';
+    ctx.beginPath();
+    ctx.moveTo(-12, 30);
+    ctx.lineTo(-12, 2);
+    ctx.arc(0, 2, 12, Math.PI, 0);
+    ctx.lineTo(12, 30);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = '#4a4050';
+    ctx.fillRect(-22, -10, 6, 40);
+    ctx.fillRect(16, -10, 6, 40);
+
+    ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0, -46);
+    ctx.lineTo(0, -58);
+    ctx.moveTo(-5, -52);
+    ctx.lineTo(5, -52);
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  const BRAZIERS = [
+    { x: 250, y: 150 },
+    { x: 700, y: 400 },
+  ];
+
+  function drawBrazierGlow(x, y, time) {
+    const flicker = 0.7 + 0.3 * Math.sin(time * 9 + x) + 0.15 * Math.sin(time * 23 + y);
+    const glowR = 75 * (0.85 + flicker * 0.15);
+    const glow = ctx.createRadialGradient(x, y, 0, x, y, glowR);
+    glow.addColorStop(0, `rgba(255, 140, 50, ${0.16 * flicker})`);
+    glow.addColorStop(1, 'rgba(255, 140, 50, 0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(x, y, glowR, 0, Math.PI * 2);
+    ctx.fill();
+    return flicker;
+  }
+
+  function drawBrazier(x, y, flicker) {
+    ctx.save();
+    ctx.translate(x, y);
+
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.beginPath();
+    ctx.ellipse(2, 14, 12, 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = '#3a3440';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(-6, 14);
+    ctx.lineTo(-3, -4);
+    ctx.moveTo(6, 14);
+    ctx.lineTo(3, -4);
+    ctx.stroke();
+
+    ctx.fillStyle = '#2a2430';
+    ctx.beginPath();
+    ctx.ellipse(0, -6, 9, 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    const flameH = 14 * flicker;
+    const flameGrad = ctx.createLinearGradient(0, -6, 0, -6 - flameH);
+    flameGrad.addColorStop(0, '#ff8c3c');
+    flameGrad.addColorStop(0.6, '#ffb85c');
+    flameGrad.addColorStop(1, 'rgba(255,220,150,0)');
+    ctx.fillStyle = flameGrad;
+    ctx.beginPath();
+    ctx.moveTo(-4, -6);
+    ctx.quadraticCurveTo(-2, -6 - flameH * 0.6, 0, -6 - flameH);
+    ctx.quadraticCurveTo(2, -6 - flameH * 0.6, 4, -6);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
+  const GROUND_CRACKS = [
+    { x: 300, y: 150, len: 40, rot: 0.4 },
+    { x: 620, y: 110, len: 30, rot: -0.3 },
+    { x: 220, y: 400, len: 35, rot: 1.1 },
+    { x: 640, y: 330, len: 45, rot: -0.8 },
+    { x: 450, y: 460, len: 30, rot: 0.2 },
+    { x: 130, y: 330, len: 26, rot: 0.9 },
+  ];
+
+  function drawCrack(x, y, len, rot) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(rot);
+    ctx.strokeStyle = 'rgba(0,0,0,0.32)';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(-len / 2, 0);
+    ctx.lineTo(-len / 6, 3);
+    ctx.lineTo(len / 6, -2);
+    ctx.lineTo(len / 2, 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  const MOSS_PATCHES = [
+    { x: 360, y: 220, r: 32 },
+    { x: 600, y: 320, r: 24 },
+    { x: 250, y: 380, r: 28 },
+    { x: 780, y: 300, r: 20 },
+  ];
+
+  function drawMoss(x, y, r) {
+    ctx.fillStyle = 'rgba(70, 90, 50, 0.07)';
+    ctx.beginPath();
+    ctx.ellipse(x, y, r, r * 0.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  function drawArenaBackground(time) {
     const grad = ctx.createLinearGradient(0, 0, 0, bounds.height);
     grad.addColorStop(0, '#1a1420');
     grad.addColorStop(1, '#0c0810');
@@ -406,7 +596,16 @@
       ctx.stroke();
     }
 
+    for (const m of MOSS_PATCHES) drawMoss(m.x, m.y, m.r);
+    for (const c of GROUND_CRACKS) drawCrack(c.x, c.y, c.len, c.rot);
+
+    const flickers = BRAZIERS.map((b) => drawBrazierGlow(b.x, b.y, time));
+
     for (const t of TOMBSTONES) drawTombstone(t.x, t.y, t.scale, t.rot);
+    for (const t of DEAD_TREES) drawDeadTree(t.x, t.y, t.scale, t.rot);
+    drawCrypt(850, 300);
+
+    BRAZIERS.forEach((b, i) => drawBrazier(b.x, b.y, flickers[i]));
   }
 
   // Slow-drifting fog wisps for atmosphere.
@@ -467,7 +666,7 @@
   }
 
   function render(dt) {
-    drawArenaBackground();
+    drawArenaBackground(elapsed);
     base.draw(ctx, elapsed);
     for (const enemy of enemies) enemy.draw(ctx);
     for (const bullet of bullets) bullet.draw(ctx);

@@ -78,6 +78,13 @@ None of that is done yet; this repo is still the pure web build.
 - Gothic visual pass: gradient/shadow shading for pseudo-3D volume, drifting
   fog, a vignette, decorative tombstones, and a pulsing rune-glow altar —
   all Canvas 2D tricks, no actual 3D or external art assets
+- Fixed 3/4-elevated "camera" (Vampire Survivors/Brotato-style): characters
+  don't rotate to face their direction, they mirror left/right and have
+  procedurally animated two-segment limbs that swing on a walk cycle driven
+  by actual distance travelled, so motion freezes when something is
+  stationary instead of animating in place
+- A denser environment: dead trees, a crypt, flickering lit braziers,
+  cracked ground and moss patches alongside the tombstones
 
 ## Ideas for expanding
 
