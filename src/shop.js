@@ -8,6 +8,7 @@ const SHOP_CATALOG = [
     desc: '+4 bolt damage',
     baseCost: 25,
     costGrowth: 1.35,
+    maxPurchases: 8,
     apply: (player) => { player.damage += 4; },
   },
   {
@@ -16,6 +17,7 @@ const SHOP_CATALOG = [
     desc: '+0.6 shots/sec',
     baseCost: 30,
     costGrowth: 1.4,
+    maxPurchases: 6,
     apply: (player) => { player.fireRate += 0.6; },
   },
   {
@@ -24,6 +26,7 @@ const SHOP_CATALOG = [
     desc: '+18 move speed',
     baseCost: 18,
     costGrowth: 1.3,
+    maxPurchases: 6,
     apply: (player) => { player.speed += 18; },
   },
   {
@@ -32,6 +35,7 @@ const SHOP_CATALOG = [
     desc: '+20 max HP & full heal',
     baseCost: 22,
     costGrowth: 1.32,
+    maxPurchases: 6,
     apply: (player) => { player.maxHealth += 20; player.health = player.maxHealth; },
   },
   {

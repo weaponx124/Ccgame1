@@ -10,12 +10,20 @@
 const FENCE_MAX = 8; // total ever placed, across all tiers
 const MINE_MAX = 6;
 
+// Fences render as a 2-unit-wide panel rather than a single post, and neighboring fences within
+// FENCE_CONNECT_DIST draw a connecting rail so a row of them reads as one continuous wall.
+// FENCE_MIN_SPACING is deliberately looser than the connect distance so placements can sit close
+// enough to link up without fully overlapping.
+const FENCE_WIDTH = 46;
+const FENCE_MIN_SPACING = 34;
+const FENCE_CONNECT_DIST = 60;
+
 // `cost` is what one placement costs at that tier; `unlockCost` is the one-time price to
 // research the tier at all (paid once, via the "Upgrade to..." row; tier 0 needs no unlock).
 const FENCE_TIERS = [
-  { name: 'Wooden Fence', unlockCost: 0, cost: 15, maxHealth: 26, slowMult: 0.5, slowRadius: 28 },
-  { name: 'Iron Palisade', unlockCost: 70, cost: 30, maxHealth: 65, slowMult: 0.35, slowRadius: 32 },
-  { name: 'Runic Barrier', unlockCost: 150, cost: 55, maxHealth: 130, slowMult: 0.2, slowRadius: 38 },
+  { name: 'Wooden Fence', unlockCost: 0, cost: 15, maxHealth: 26, slowMult: 0.5, slowRadius: 42 },
+  { name: 'Iron Palisade', unlockCost: 70, cost: 30, maxHealth: 65, slowMult: 0.35, slowRadius: 48 },
+  { name: 'Runic Barrier', unlockCost: 150, cost: 55, maxHealth: 130, slowMult: 0.2, slowRadius: 56 },
 ];
 
 const MINE_TIERS = [
@@ -30,7 +38,8 @@ class Fence {
     this.x = x;
     this.y = y;
     this.tierIndex = tierIndex;
-    this.radius = 9;
+    this.width = FENCE_WIDTH;
+    this.radius = FENCE_WIDTH / 2;
     this.slowRadius = tier.slowRadius;
     this.slowMult = tier.slowMult;
     this.maxHealth = tier.maxHealth;
@@ -46,12 +55,13 @@ class Fence {
   draw(ctx) {
     const damaged = this.health < this.maxHealth * 0.5;
     const rich = this.tierIndex >= 1;
+    const hw = this.width / 2;
     ctx.save();
     ctx.translate(this.x, this.y);
 
     ctx.fillStyle = 'rgba(0,0,0,0.3)';
     ctx.beginPath();
-    ctx.ellipse(0, 5, 11, 3.5, 0, 0, Math.PI * 2);
+    ctx.ellipse(0, 5, hw * 1.05, 4, 0, 0, Math.PI * 2);
     ctx.fill();
 
     const postColor = rich ? (damaged ? '#5a5a62' : '#8a8a94') : (damaged ? '#4a3a2a' : '#6b4a2a');
@@ -59,24 +69,26 @@ class Fence {
     ctx.lineWidth = 3;
     ctx.lineCap = 'round';
     ctx.beginPath();
-    ctx.moveTo(-8, 6);
-    ctx.lineTo(-4, -13);
-    ctx.moveTo(8, 6);
-    ctx.lineTo(4, -13);
+    ctx.moveTo(-hw + 3, 6);
+    ctx.lineTo(-hw + 6, -13);
+    ctx.moveTo(0, 6);
+    ctx.lineTo(0, -14);
+    ctx.moveTo(hw - 3, 6);
+    ctx.lineTo(hw - 6, -13);
     ctx.stroke();
 
     const railColor = rich ? (damaged ? '#6a6a74' : '#b8b8c4') : (damaged ? '#5a4632' : '#8a6a42');
     ctx.strokeStyle = railColor;
     ctx.lineWidth = 2.4;
     ctx.beginPath();
-    ctx.moveTo(-7, -3);
-    ctx.lineTo(7, -5);
-    ctx.moveTo(-6.5, 2);
-    ctx.lineTo(6.5, 0);
+    ctx.moveTo(-hw + 2, -3);
+    ctx.lineTo(hw - 2, -5);
+    ctx.moveTo(-hw + 1, 2);
+    ctx.lineTo(hw - 1, 0);
     ctx.stroke();
 
     if (this.tierIndex >= 2) {
-      // Runic Barrier: a faint glowing sigil between the posts.
+      // Runic Barrier: a faint glowing sigil at the panel's center.
       ctx.strokeStyle = 'rgba(180, 120, 240, 0.6)';
       ctx.lineWidth = 1;
       ctx.shadowColor = 'rgba(180, 120, 240, 0.7)';
@@ -87,6 +99,35 @@ class Fence {
       ctx.shadowBlur = 0;
     }
     ctx.restore();
+  }
+}
+
+/** Draws a connecting rail between any two nearby fences so a row of them reads as one wall. */
+function drawFenceConnections(ctx, fenceList) {
+  const alive = fenceList.filter((f) => f.alive);
+  for (let i = 0; i < alive.length; i++) {
+    for (let j = i + 1; j < alive.length; j++) {
+      const a = alive[i];
+      const b = alive[j];
+      const d = dist(a.x, a.y, b.x, b.y);
+      if (d > FENCE_CONNECT_DIST || d < 1) continue;
+      const ux = (b.x - a.x) / d;
+      const uy = (b.y - a.y) / d;
+      const ax = a.x + ux * (a.radius - 4);
+      const ay = a.y + uy * (a.radius - 4);
+      const bx = b.x - ux * (b.radius - 4);
+      const by = b.y - uy * (b.radius - 4);
+      ctx.save();
+      ctx.strokeStyle = 'rgba(150, 120, 90, 0.7)';
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      ctx.moveTo(ax, ay - 3);
+      ctx.lineTo(bx, by - 5);
+      ctx.moveTo(ax, ay + 2);
+      ctx.lineTo(bx, by);
+      ctx.stroke();
+      ctx.restore();
+    }
   }
 }
 

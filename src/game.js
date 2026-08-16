@@ -56,6 +56,17 @@
     placementBar: document.getElementById('placement-bar'),
     placementPrompt: document.getElementById('placement-prompt'),
     placementCancelBtn: document.getElementById('placement-cancel-btn'),
+    waveClearBanner: document.getElementById('wave-clear-banner'),
+    waveClearSeconds: document.getElementById('wave-clear-seconds'),
+    fieldPrepPill: document.getElementById('field-prep-pill'),
+    fieldPrepPillText: document.getElementById('field-prep-pill-text'),
+    viewFieldBtn: document.getElementById('view-field-btn'),
+    reopenShopBtn: document.getElementById('reopen-shop-btn'),
+    defenseSelectBar: document.getElementById('defense-select-bar'),
+    defenseSelectTitle: document.getElementById('defense-select-title'),
+    defenseSelectMoveBtn: document.getElementById('defense-select-move-btn'),
+    defenseSelectUpgradeBtn: document.getElementById('defense-select-upgrade-btn'),
+    defenseSelectCloseBtn: document.getElementById('defense-select-close-btn'),
   };
 
   // ---------- Game state ----------
@@ -65,11 +76,14 @@
   let bullets, enemies;
   let fences, mines, explosions, hitEffects;
   let defenseState; // { fenceTier, mineTier, fencesPlaced, minesPlaced }
-  let placementMode; // null | { kind: 'fence'|'mine', tierIndex, cost }
+  let placementMode; // null | { kind: 'fence'|'mine', tierIndex, moving: Fence|Mine|null }
   let placementCursor; // { x, y } | null — last known pointer position while placing
   let invalidPlacementFlash; // seconds remaining on the "can't place here" marker
   let prepCountdown; // seconds remaining in the current shop/prep phase
   let damageFlash; // 0..1, screen-tint intensity that decays after the player/base is hit
+  let shopHidden; // true while the shop panel is manually closed during prep to inspect the field
+  let selectedDefense; // null | { kind: 'fence'|'mine', ref } — a placed item picked for move/upgrade
+  let waveClearTimer; // seconds remaining showing the "Wave Cleared" banner before the shop opens
   let gold;
 
   function setPauseButtonVisible(visible) {
@@ -93,6 +107,13 @@
     placementCursor = null;
     invalidPlacementFlash = 0;
     damageFlash = 0;
+    shopHidden = false;
+    selectedDefense = null;
+    waveClearTimer = 0;
+    el.waveClearBanner.classList.add('hidden');
+    el.defenseSelectBar.classList.add('hidden');
+    el.reopenShopBtn.classList.add('hidden');
+    el.fieldPrepPill.classList.add('hidden');
     gold = 20; // enough for one small early purchase (a fence, a mine, or a cheap upgrade)
     state = 'shop';
     waveManager.waveNumber = 0; // startNextWave will bump to 1
@@ -102,10 +123,15 @@
   // ---------- Shop UI ----------
   const PREP_TIME_FIRST = 35;
   const PREP_TIME = 25;
+  const WAVE_CLEAR_DELAY = 5; // seconds the "Wave Cleared" banner holds before the shop opens
 
   function openShop(isFirst = false) {
     state = 'shop';
     prepCountdown = isFirst ? PREP_TIME_FIRST : PREP_TIME;
+    shopHidden = false;
+    hideDefenseSelection();
+    el.reopenShopBtn.classList.add('hidden');
+    el.fieldPrepPill.classList.add('hidden');
     el.shopTitle.textContent = isFirst ? 'Prepare for the Hunt' : `Wave ${waveManager.waveNumber} Survived`;
     renderShopItems();
     renderWeaponItems();
@@ -119,8 +145,26 @@
     const max = waveManager.waveNumber === 0 ? PREP_TIME_FIRST : PREP_TIME;
     const pct = clamp(prepCountdown / max, 0, 1) * 100;
     el.prepCountdownFill.style.width = pct + '%';
-    el.prepCountdownText.textContent = Math.ceil(prepCountdown) + 's';
+    const secs = Math.ceil(prepCountdown) + 's';
+    el.prepCountdownText.textContent = secs;
+    el.fieldPrepPillText.textContent = secs;
   }
+
+  el.viewFieldBtn.addEventListener('click', () => {
+    shopHidden = true;
+    el.shopOverlay.classList.add('hidden');
+    el.reopenShopBtn.classList.remove('hidden');
+    el.fieldPrepPill.classList.remove('hidden');
+    updatePrepCountdownUI();
+  });
+
+  el.reopenShopBtn.addEventListener('click', () => {
+    shopHidden = false;
+    hideDefenseSelection();
+    el.shopOverlay.classList.remove('hidden');
+    el.reopenShopBtn.classList.add('hidden');
+    el.fieldPrepPill.classList.add('hidden');
+  });
 
   function renderDefenseItems() {
     el.defenseItems.innerHTML = '';
@@ -181,13 +225,18 @@
   }
 
   // ---------- Manual defense placement ----------
-  function beginPlacement(kind, tierIndex) {
-    placementMode = { kind, tierIndex };
+  function beginPlacement(kind, tierIndex, moving = null) {
+    placementMode = { kind, tierIndex, moving };
     placementCursor = null;
     el.shopOverlay.classList.add('hidden');
+    el.reopenShopBtn.classList.add('hidden');
+    el.fieldPrepPill.classList.add('hidden');
+    hideDefenseSelection();
     el.placementBar.classList.remove('hidden');
     const tiers = kind === 'fence' ? FENCE_TIERS : MINE_TIERS;
-    el.placementPrompt.textContent = `Tap the battlefield to place your ${tiers[tierIndex].name}. It's already paid for.`;
+    el.placementPrompt.textContent = moving
+      ? `Tap the battlefield to move your ${tiers[tierIndex].name}.`
+      : `Tap the battlefield to place your ${tiers[tierIndex].name}. It's already paid for.`;
     input.setSuspended(true);
   }
 
@@ -196,23 +245,37 @@
     placementCursor = null;
     el.placementBar.classList.add('hidden');
     input.setSuspended(false);
-    el.shopOverlay.classList.remove('hidden');
+    if (shopHidden) {
+      el.reopenShopBtn.classList.remove('hidden');
+      el.fieldPrepPill.classList.remove('hidden');
+      updatePrepCountdownUI();
+    } else {
+      el.shopOverlay.classList.remove('hidden');
+    }
   }
 
   el.placementCancelBtn.addEventListener('click', () => {
     if (!placementMode) return;
-    const tiers = placementMode.kind === 'fence' ? FENCE_TIERS : MINE_TIERS;
-    gold += tiers[placementMode.tierIndex].cost; // refund — it was paid up front
+    if (!placementMode.moving) {
+      const tiers = placementMode.kind === 'fence' ? FENCE_TIERS : MINE_TIERS;
+      gold += tiers[placementMode.tierIndex].cost; // refund — it was paid up front
+    }
     endPlacement();
     updateHud();
     renderDefenseItems();
   });
 
-  function isValidPlacement(x, y) {
+  function isValidPlacement(x, y, ignore = null) {
     if (x < 26 || x > bounds.width - 26 || y < 26 || y > bounds.height - 26) return false;
     if (dist(x, y, base.x, base.y) < base.radius + 22) return false;
-    for (const f of fences) if (dist(x, y, f.x, f.y) < 24) return false;
-    for (const m of mines) if (dist(x, y, m.x, m.y) < 24) return false;
+    for (const f of fences) {
+      if (f === ignore) continue;
+      if (dist(x, y, f.x, f.y) < FENCE_MIN_SPACING) return false;
+    }
+    for (const m of mines) {
+      if (m === ignore) continue;
+      if (dist(x, y, m.x, m.y) < 24) return false;
+    }
     return true;
   }
 
@@ -227,12 +290,16 @@
     if (!placementMode) return;
     const p = { x, y };
     placementCursor = p;
-    if (!isValidPlacement(p.x, p.y)) {
+    const ignore = placementMode.moving;
+    if (!isValidPlacement(p.x, p.y, ignore)) {
       invalidPlacementFlash = 0.3;
       return;
     }
-    const { kind, tierIndex } = placementMode;
-    if (kind === 'fence') {
+    const { kind, tierIndex, moving } = placementMode;
+    if (moving) {
+      moving.x = p.x;
+      moving.y = p.y;
+    } else if (kind === 'fence') {
       fences.push(new Fence(p.x, p.y, tierIndex));
       defenseState.fencesPlaced += 1;
     } else {
@@ -244,7 +311,81 @@
     renderDefenseItems();
   }
 
-  canvas.addEventListener('pointerdown', (e) => handlePlacementTap(e.clientX, e.clientY));
+  // ---------- Selecting a placed defense (to move or upgrade it) ----------
+  // Only reachable during the shop/prep phase with the shop panel closed — closing the panel
+  // is how the player switches from "spend gold" to "walk the field and rework what's already down".
+  function selectDefense(kind, ref) {
+    selectedDefense = { kind, ref };
+    const tiers = kind === 'fence' ? FENCE_TIERS : MINE_TIERS;
+    const tier = tiers[ref.tierIndex];
+    el.defenseSelectTitle.textContent = `${tier.name} selected`;
+    const unlockedTierIndex = defenseState[kind === 'fence' ? 'fenceTier' : 'mineTier'];
+    const canUpgrade = unlockedTierIndex > ref.tierIndex;
+    el.defenseSelectUpgradeBtn.classList.toggle('hidden', !canUpgrade);
+    if (canUpgrade) {
+      const nextTier = tiers[unlockedTierIndex];
+      el.defenseSelectUpgradeBtn.textContent = `Upgrade to ${nextTier.name} (${nextTier.cost}g)`;
+      el.defenseSelectUpgradeBtn.disabled = gold < nextTier.cost;
+    }
+    el.defenseSelectBar.classList.remove('hidden');
+  }
+
+  function hideDefenseSelection() {
+    selectedDefense = null;
+    el.defenseSelectBar.classList.add('hidden');
+  }
+
+  function handleFieldTap(x, y) {
+    for (const f of fences) {
+      if (f.alive && dist(x, y, f.x, f.y) <= f.radius + 8) { selectDefense('fence', f); return; }
+    }
+    for (const m of mines) {
+      if (m.alive && dist(x, y, m.x, m.y) <= m.radius + 8) { selectDefense('mine', m); return; }
+    }
+    hideDefenseSelection();
+  }
+
+  el.defenseSelectMoveBtn.addEventListener('click', () => {
+    if (!selectedDefense) return;
+    const { kind, ref } = selectedDefense;
+    beginPlacement(kind, ref.tierIndex, ref);
+  });
+
+  el.defenseSelectUpgradeBtn.addEventListener('click', () => {
+    if (!selectedDefense) return;
+    const { kind, ref } = selectedDefense;
+    const tiers = kind === 'fence' ? FENCE_TIERS : MINE_TIERS;
+    const unlockedTierIndex = defenseState[kind === 'fence' ? 'fenceTier' : 'mineTier'];
+    if (unlockedTierIndex <= ref.tierIndex) return;
+    const nextTier = tiers[unlockedTierIndex];
+    if (gold < nextTier.cost) return;
+    gold -= nextTier.cost;
+    ref.tierIndex = unlockedTierIndex;
+    if (kind === 'fence') {
+      ref.maxHealth = nextTier.maxHealth;
+      ref.health = nextTier.maxHealth;
+      ref.slowRadius = nextTier.slowRadius;
+      ref.slowMult = nextTier.slowMult;
+    } else {
+      ref.damage = nextTier.damage;
+      ref.blastRadius = nextTier.blastRadius;
+    }
+    updateHud();
+    selectDefense(kind, ref); // refresh the bar (now shows the new tier, or hides Upgrade if maxed)
+  });
+
+  el.defenseSelectCloseBtn.addEventListener('click', hideDefenseSelection);
+
+  canvas.addEventListener('pointerdown', (e) => {
+    if (placementMode) {
+      handlePlacementTap(e.clientX, e.clientY);
+      return;
+    }
+    if (state === 'shop' && shopHidden) {
+      const p = input.toCanvasSpace(e.clientX, e.clientY);
+      handleFieldTap(p.x, p.y);
+    }
+  });
   canvas.addEventListener('pointermove', (e) => {
     if (!placementMode) return;
     placementCursor = input.toCanvasSpace(e.clientX, e.clientY);
@@ -288,17 +429,28 @@
     }
   }
 
+  /** A row of small dots showing how many of a capped upgrade you've bought vs. how many remain. */
+  function pipsHtml(filled, total) {
+    let dots = '';
+    for (let i = 0; i < total; i++) {
+      dots += `<span class="pip${i < filled ? ' filled' : ''}"></span>`;
+    }
+    return `<div class="upgrade-pips">${dots}</div>`;
+  }
+
   function renderShopItems() {
     el.shopItems.innerHTML = '';
     for (const item of SHOP_CATALOG) {
       const cost = shop.costFor(item);
       const maxedOut = item.maxPurchases && shop.purchaseCounts[item.id] >= item.maxPurchases;
+      const pips = item.maxPurchases ? pipsHtml(shop.purchaseCounts[item.id], item.maxPurchases) : '';
       const row = document.createElement('div');
       row.className = 'shop-item';
       row.innerHTML = `
         <div class="shop-item-info">
           <div class="shop-item-name">${item.name}${maxedOut ? ' (MAX)' : ''}</div>
           <div class="shop-item-desc">${item.desc}</div>
+          ${pips}
         </div>
         <button class="shop-item-buy" ${maxedOut ? 'disabled' : ''}>${maxedOut ? 'MAX' : cost + 'g'}</button>
       `;
@@ -410,6 +562,7 @@
       fences: fences.map((f) => ({ x: f.x, y: f.y, health: f.health, maxHealth: f.maxHealth, tierIndex: f.tierIndex })),
       mines: mines.map((m) => ({ x: m.x, y: m.y, damage: m.damage, blastRadius: m.blastRadius, tierIndex: m.tierIndex })),
       defenseState: { ...defenseState },
+      waveClearTimer,
     };
   }
 
@@ -472,6 +625,10 @@
     placementCursor = null;
     invalidPlacementFlash = 0;
     damageFlash = 0;
+    shopHidden = false;
+    selectedDefense = null;
+    el.defenseSelectBar.classList.add('hidden');
+    waveClearTimer = snapshot.waveClearTimer || 0;
 
     gold = snapshot.gold;
     paused = false;
@@ -482,7 +639,13 @@
     } else {
       state = 'playing';
       el.shopOverlay.classList.add('hidden');
+      el.reopenShopBtn.classList.add('hidden');
+      el.fieldPrepPill.classList.add('hidden');
       setPauseButtonVisible(true);
+      if (waveClearTimer > 0) {
+        el.waveClearBanner.classList.remove('hidden');
+        updateWaveClearBannerUI();
+      }
     }
     updateHud();
   }
@@ -639,13 +802,28 @@
       gold = Math.max(0, gold - 10);
     }
 
-    if (waveManager.isWaveCleared(enemies.length)) {
+    if (waveClearTimer > 0) {
+      // The wave is already cleared and the bonus already paid out — this is just a beat to
+      // let the last kill land before the shop interrupts.
+      waveClearTimer -= dt;
+      updateWaveClearBannerUI();
+      if (waveClearTimer <= 0) {
+        el.waveClearBanner.classList.add('hidden');
+        waveManager.finishWave();
+        openShop(false);
+      }
+    } else if (waveManager.isWaveCleared(enemies.length)) {
       gold += 10 + waveManager.waveNumber * 2; // wave-clear bonus, on top of per-kill gold
-      waveManager.finishWave();
-      openShop(false);
+      waveClearTimer = WAVE_CLEAR_DELAY;
+      el.waveClearBanner.classList.remove('hidden');
+      updateWaveClearBannerUI();
     }
 
     updateHud();
+  }
+
+  function updateWaveClearBannerUI() {
+    el.waveClearSeconds.textContent = Math.max(0, Math.ceil(waveClearTimer));
   }
 
   // ---------- Render: gothic graveyard atmosphere ----------
@@ -982,7 +1160,7 @@
   function drawPlacementPreview() {
     if (!placementMode || !placementCursor) return;
     const { x, y } = placementCursor;
-    const valid = isValidPlacement(x, y);
+    const valid = isValidPlacement(x, y, placementMode.moving);
     const tiers = placementMode.kind === 'fence' ? FENCE_TIERS : MINE_TIERS;
     const previewRadius = placementMode.kind === 'fence'
       ? tiers[placementMode.tierIndex].slowRadius
@@ -1032,8 +1210,23 @@
     ctx.restore();
   }
 
+  function drawDefenseSelectionRing() {
+    if (!selectedDefense || !selectedDefense.ref.alive) return;
+    const { ref } = selectedDefense;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(224, 192, 104, 0.9)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([4, 3]);
+    ctx.beginPath();
+    ctx.arc(ref.x, ref.y, ref.radius + 8, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+  }
+
   function render(dt) {
     drawArenaBackground(elapsed);
+    drawFenceConnections(ctx, fences);
     for (const mine of mines) mine.draw(ctx, elapsed);
     for (const fence of fences) fence.draw(ctx);
     base.draw(ctx, elapsed);
@@ -1042,6 +1235,7 @@
     if (state !== 'gameover') player.draw(ctx, elapsed);
     for (const ex of explosions) ex.draw(ctx);
     for (const fx of hitEffects) fx.draw(ctx);
+    drawDefenseSelectionRing();
     drawPlacementPreview();
     drawInvalidPlacementFlash();
 
@@ -1081,8 +1275,13 @@
     hasSave: () => !!loadGame(),
     peekSave: () => loadGame(),
     debugSetBaseHealth: (h) => { base.health = h; },
-    debugSetGold: (g) => { gold = g; updateHud(); },
+    debugSetGold: (g) => {
+      gold = g;
+      updateHud();
+      if (state === 'shop') { renderShopItems(); renderWeaponItems(); renderDefenseItems(); }
+    },
     debugSpawn: (typeKey, x, y) => { enemies.push(new Enemy(x, y, typeKey, 1)); },
+    debugForceWaveClear: () => { enemies = []; waveManager.spawnQueue = []; },
     debugSetPaused: (v) => { paused = v; },
     getState: () => ({
       state,
@@ -1104,13 +1303,22 @@
       fences: fences.map((f) => ({ x: f.x, y: f.y, health: f.health, maxHealth: f.maxHealth, tierIndex: f.tierIndex })),
       mines: mines.map((m) => ({ x: m.x, y: m.y, damage: m.damage, blastRadius: m.blastRadius, tierIndex: m.tierIndex })),
       defenseState: { ...defenseState },
-      placementMode: placementMode ? { ...placementMode } : null,
+      placementMode: placementMode ? { kind: placementMode.kind, tierIndex: placementMode.tierIndex, moving: !!placementMode.moving } : null,
       prepCountdown,
+      shopHidden,
+      waveClearTimer,
+      selectedDefense: selectedDefense ? { kind: selectedDefense.kind, x: selectedDefense.ref.x, y: selectedDefense.ref.y, tierIndex: selectedDefense.ref.tierIndex } : null,
       moveStick: { active: input.moveStick.active, ...input.moveStick.read() },
       aimStick: { active: input.aimStick.active, ...input.aimStick.read() },
     }),
     debugBeginPlacement: (kind, tierIndex) => beginPlacement(kind, tierIndex),
     debugPlaceAt: (x, y) => placeAt(x, y),
     debugSetPrepCountdown: (s) => { prepCountdown = s; },
+    debugSetWaveClearTimer: (s) => { waveClearTimer = s; },
+    debugViewField: () => el.viewFieldBtn.click(),
+    debugReopenShop: () => el.reopenShopBtn.click(),
+    debugSelectFieldTap: (x, y) => handleFieldTap(x, y),
+    debugMoveSelected: () => el.defenseSelectMoveBtn.click(),
+    debugUpgradeSelected: () => el.defenseSelectUpgradeBtn.click(),
   };
 })();

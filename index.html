@@ -61,13 +61,36 @@
         <div id="weapon-items"></div>
         <h3 class="shop-section-title">Defenses</h3>
         <div id="defense-items"></div>
-        <button id="next-wave-btn">Start Next Wave &rarr;</button>
+        <div id="shop-actions-row">
+          <button id="view-field-btn" class="btn-secondary">View Field</button>
+          <button id="next-wave-btn">Start Next Wave &rarr;</button>
+        </div>
       </div>
     </div>
 
     <div id="placement-bar" class="hidden">
       <p id="placement-prompt">Tap the battlefield to place your defense.</p>
       <button id="placement-cancel-btn" class="btn-secondary">Cancel</button>
+    </div>
+
+    <div id="wave-clear-banner" class="hidden">
+      <h2 id="wave-clear-title">Wave Cleared!</h2>
+      <p id="wave-clear-subtitle">Next wave in <span id="wave-clear-seconds">5</span>s&hellip;</p>
+    </div>
+
+    <div id="field-prep-pill" class="hidden">
+      <span id="field-prep-pill-text">25s</span>
+    </div>
+
+    <button id="reopen-shop-btn" class="hidden">Open Shop</button>
+
+    <div id="defense-select-bar" class="hidden">
+      <p id="defense-select-title">Defense selected</p>
+      <div id="defense-select-actions">
+        <button id="defense-select-move-btn" class="btn-secondary">Move</button>
+        <button id="defense-select-upgrade-btn" class="btn-secondary hidden">Upgrade</button>
+        <button id="defense-select-close-btn" class="btn-secondary">Close</button>
+      </div>
     </div>
 
     <div id="gameover-overlay" class="hidden">

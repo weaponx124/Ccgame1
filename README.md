@@ -107,14 +107,34 @@ None of that is done yet; this repo is still the pure web build.
   it). Each defense has a three-tier ladder (Wooden Fence → Iron
   Palisade → Runic Barrier; Buried Mine → Arcane Charge → Hellfire Trap).
   Researching the next tier is a one-time purchase that only affects
-  defenses placed afterward — existing placements keep their original
-  stats, so early cheap defenses aren't destroyed, but they do become
-  the obvious weak point once you can afford better
+  *new* placements — existing ones keep their stats until you spend gold
+  to upgrade that specific placement in place (see "View Field" below),
+  so early cheap defenses aren't retroactively destroyed, but they do
+  become the obvious weak point once you can afford better
+- Fences are two units wide, and any two placed within range of each
+  other automatically link with a connecting rail, so a row of them
+  reads as one continuous wall instead of separate posts
+- "View Field": closing the shop panel during prep (via the View Field
+  button, or the floating Open Shop button to bring it back) reveals the
+  battlefield underneath so you can plan around what's already down. With
+  the panel closed, tapping a placed fence or mine selects it, opening a
+  small action bar to Move it (drag it to a new spot for free) or, once
+  you've researched a higher tier, Upgrade it in place for that tier's
+  placement cost
+- Capped shop upgrades (bolt damage, fire rate, move speed, max HP, crit
+  chance) show a row of pips under their description — filled pips are
+  levels you already own, empty ones are what's left before that upgrade
+  maxes out
 - A short prep countdown (35s on the first wave, 25s after) ticks down
   in the shop between waves, pushing you to make upgrade decisions
   quickly; the clock pauses automatically while a placement cursor is
   active, so lining up exactly where a fence or mine goes is never
-  rushed. The countdown hitting zero starts the next wave automatically
+  rushed. It keeps running in the background even with the shop panel
+  closed (shown as a small pill at the top of the screen) and hitting
+  zero starts the next wave automatically
+- After the last enemy in a wave dies, a 5-second "Wave Cleared" banner
+  holds before the shop opens, so the kill has a moment to land before
+  the UI interrupts
 - Hit feedback: landing a shot spawns a quick spark burst and a floating
   damage number (crits are bigger and orange); mine/charge detonations
   get an expanding shockwave ring, a core flash, and scattering embers
