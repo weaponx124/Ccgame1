@@ -82,9 +82,19 @@ None of that is done yet; this repo is still the pure web build.
 - Six purchasable upgrades (bolt damage, fire rate, move speed, max HP,
   crit chance, ward repair)
 - Ward destroyed = game over; hunter death just costs some gold and respawns
-- Gothic visual pass: gradient/shadow shading for pseudo-3D volume, drifting
-  fog, a vignette, decorative tombstones, and a pulsing rune-glow altar —
-  all Canvas 2D tricks, no actual 3D or external art assets
+- Gothic horror visual pass: a heavier, cooler-lit palette (cold moonlight
+  against warm brazier fire), a mottled/uneven ground with old dried blood
+  stains and bone piles, a stronger tinted vignette, and a film-grain
+  overlay baked once into a repeating pattern for cheap per-frame grit.
+  Monsters and the hunter got a grittier redesign: jagged torn silhouettes
+  instead of smooth shapes, exposed ribs and a hanging jaw on zombies,
+  fangs and blood at the mouth on vampires and werewolves, claws and
+  matted fur on the werewolf, a tattered cloak and a narrow predatory
+  eye-glow on the hunter. Enemy kills now leave a permanent (slow-fading)
+  blood pool on the ground, and hit sparks/damage numbers read as blood
+  spatter rather than gold sparks. The ward altar weeps old blood down its
+  face and has a small skull etched into its glowing core. All still pure
+  Canvas 2D — no 3D or external art assets
 - Fixed 3/4-elevated "camera" (Vampire Survivors/Brotato-style): characters
   don't rotate to face their direction, they mirror left/right and have
   procedurally animated two-segment limbs that swing on a walk cycle driven

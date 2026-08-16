@@ -76,7 +76,7 @@
   let paused = false;
   let player, base, waveManager, shop;
   let bullets, enemies;
-  let fences, mines, explosions, hitEffects;
+  let fences, mines, explosions, hitEffects, bloodPools;
   let defenseState; // { fenceTier, mineTier, fencesPlaced, minesPlaced }
   let placementMode; // null | { kind: 'fence'|'mine', tierIndex, moving: Fence|Mine|null }
   let placementCursor; // { x, y } | null — last known pointer position while placing
@@ -104,6 +104,7 @@
     mines = [];
     explosions = [];
     hitEffects = [];
+    bloodPools = [];
     defenseState = { fenceTier: 0, mineTier: 0, fencesPlaced: 0, minesPlaced: 0 };
     placementMode = null;
     placementCursor = null;
@@ -624,6 +625,7 @@
 
     explosions = [];
     hitEffects = [];
+    bloodPools = [];
     fences = (snapshot.fences || []).map((f) => {
       const fence = new Fence(f.x, f.y, f.tierIndex || 0, f.rotation || 0);
       fence.maxHealth = f.maxHealth;
@@ -694,6 +696,8 @@
     if (damageFlash > 0) damageFlash = Math.max(0, damageFlash - dt * 2.5);
     for (const fx of hitEffects) fx.update(dt);
     hitEffects = hitEffects.filter((f) => f.alive);
+    for (const bp of bloodPools) bp.update(dt);
+    bloodPools = bloodPools.filter((b) => b.alive);
 
     if (state === 'shop') {
       // The clock only runs while no placement UI is open, so placing defenses is never rushed.
@@ -763,7 +767,10 @@
             if (!victim.alive) continue;
             if (dist(mine.x, mine.y, victim.x, victim.y) <= mine.blastRadius) {
               victim.takeDamage(mine.damage);
-              if (!victim.alive) gold += victim.reward;
+              if (!victim.alive) {
+                gold += victim.reward;
+                bloodPools.push(new BloodPool(victim.x, victim.y, victim.radius / 12));
+              }
             }
           }
           break;
@@ -789,7 +796,10 @@
           const hitAngle = Math.atan2(bullet.vy, bullet.vx);
           hitEffects.push(new HitSpark(hitCenter.x, hitCenter.y, hitAngle, bullet.isCrit));
           hitEffects.push(new DamageNumber(hitCenter.x, hitCenter.y, bullet.damage, bullet.isCrit));
-          if (!enemy.alive) gold += enemy.reward;
+          if (!enemy.alive) {
+            gold += enemy.reward;
+            bloodPools.push(new BloodPool(enemy.x, enemy.y, enemy.radius / 12));
+          }
           if (bullet.pierceRemaining > 0) {
             bullet.pierceRemaining -= 1;
           } else {
@@ -1077,37 +1087,115 @@
   ];
 
   function drawMoss(x, y, r) {
-    ctx.fillStyle = 'rgba(70, 90, 50, 0.07)';
+    ctx.fillStyle = 'rgba(40, 55, 30, 0.1)';
     ctx.beginPath();
     ctx.ellipse(x, y, r, r * 0.5, 0, 0, Math.PI * 2);
     ctx.fill();
   }
 
+  // Mottled ground blotches — uneven, damp-looking dirt instead of a clean blueprint grid.
+  // Fixed pseudo-random layout computed once at load, not regenerated per frame.
+  const GROUND_BLOTCHES = Array.from({ length: 26 }, (_, i) => {
+    const seed = i * 37.13;
+    return {
+      x: (Math.sin(seed) * 0.5 + 0.5) * bounds.width,
+      y: (Math.sin(seed * 1.7 + 3) * 0.5 + 0.5) * bounds.height,
+      r: 26 + (i % 5) * 12,
+      dark: i % 3 === 0,
+    };
+  });
+
+  function drawGroundBlotch(x, y, r, dark) {
+    const grad = ctx.createRadialGradient(x, y, 0, x, y, r);
+    if (dark) {
+      grad.addColorStop(0, 'rgba(0,0,0,0.14)');
+      grad.addColorStop(1, 'rgba(0,0,0,0)');
+    } else {
+      grad.addColorStop(0, 'rgba(60,48,40,0.14)');
+      grad.addColorStop(1, 'rgba(60,48,40,0)');
+    }
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.ellipse(x, y, r, r * 0.6, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Old, long-dried blood — permanent stains from hunts past, distinct from the fresh pools
+  // that accumulate during combat.
+  const OLD_BLOOD_STAINS = [
+    { x: 340, y: 260, r: 14, rot: 0.4 },
+    { x: 610, y: 200, r: 10, rot: -0.6 },
+    { x: 560, y: 400, r: 16, rot: 1.1 },
+    { x: 260, y: 340, r: 9, rot: 0.2 },
+  ];
+
+  function drawOldBloodStain(x, y, r, rot) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(rot);
+    ctx.fillStyle = 'rgba(45, 6, 8, 0.28)';
+    for (const [dx, dy, s] of [[0, 0, 1], [r * 0.7, r * 0.2, 0.55], [-r * 0.5, r * 0.4, 0.4], [r * 0.15, -r * 0.5, 0.35]]) {
+      ctx.beginPath();
+      ctx.ellipse(dx, dy, r * s, r * s * 0.6, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  const BONE_PILES = [
+    { x: 420, y: 460 },
+    { x: 800, y: 130 },
+  ];
+
+  function drawBonePile(x, y) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath();
+    ctx.ellipse(1, 3, 16, 5, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = '#d8cbb4';
+    ctx.lineWidth = 2.4;
+    ctx.lineCap = 'round';
+    for (const [x1, y1, x2, y2] of [[-10, 2, -2, -4], [4, 3, 12, -3], [-4, 4, 6, 2]]) {
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+    }
+    ctx.fillStyle = '#e4d8c0';
+    ctx.beginPath();
+    ctx.arc(-6, -2, 5.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#0a0806';
+    ctx.beginPath();
+    ctx.arc(-7.6, -3, 1, 0, Math.PI * 2);
+    ctx.arc(-4.4, -3, 1, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
   function drawArenaBackground(time) {
     const grad = ctx.createLinearGradient(0, 0, 0, bounds.height);
-    grad.addColorStop(0, '#1a1420');
-    grad.addColorStop(1, '#0c0810');
+    grad.addColorStop(0, '#1c1624');
+    grad.addColorStop(0.55, '#120e18');
+    grad.addColorStop(1, '#0a070e');
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, bounds.width, bounds.height);
 
-    ctx.strokeStyle = 'rgba(140,120,150,0.05)';
-    ctx.lineWidth = 1;
-    const step = 40;
-    for (let x = 0; x <= bounds.width; x += step) {
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, bounds.height);
-      ctx.stroke();
-    }
-    for (let y = 0; y <= bounds.height; y += step) {
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(bounds.width, y);
-      ctx.stroke();
-    }
+    // Cold moonlight washing down from off-screen, opposing the warm brazier fire below.
+    const moon = ctx.createRadialGradient(bounds.width * 0.5, -bounds.height * 0.3, 0, bounds.width * 0.5, -bounds.height * 0.3, bounds.height * 1.2);
+    moon.addColorStop(0, 'rgba(140, 160, 200, 0.09)');
+    moon.addColorStop(1, 'rgba(140, 160, 200, 0)');
+    ctx.fillStyle = moon;
+    ctx.fillRect(0, 0, bounds.width, bounds.height);
 
+    for (const b of GROUND_BLOTCHES) drawGroundBlotch(b.x, b.y, b.r, b.dark);
     for (const m of MOSS_PATCHES) drawMoss(m.x, m.y, m.r);
     for (const c of GROUND_CRACKS) drawCrack(c.x, c.y, c.len, c.rot);
+    for (const s of OLD_BLOOD_STAINS) drawOldBloodStain(s.x, s.y, s.r, s.rot);
+    for (const b of BONE_PILES) drawBonePile(b.x, b.y);
 
     const flickers = BRAZIERS.map((b) => drawBrazierGlow(b.x, b.y, time));
 
@@ -1118,28 +1206,37 @@
     BRAZIERS.forEach((b, i) => drawBrazier(b.x, b.y, flickers[i]));
   }
 
-  // Slow-drifting fog wisps for atmosphere.
-  const FOG = Array.from({ length: 12 }, (_, i) => ({
+  // Slow-drifting fog wisps for atmosphere — cool and heavy, weighted toward the ground rather
+  // than evenly scattered, like mist pooling in a graveyard rather than clean studio haze.
+  const FOG = Array.from({ length: 14 }, (_, i) => ({
     x: (i * 137) % bounds.width,
-    y: (i * 251) % bounds.height,
-    r: 60 + (i % 4) * 20,
-    vx: (i % 2 === 0 ? 1 : -1) * (6 + (i % 3) * 3),
-    vy: (i % 3 === 0 ? 1 : -1) * (3 + (i % 2) * 2),
-    alpha: 0.03 + (i % 3) * 0.015,
+    y: bounds.height * (0.45 + ((i * 71) % 100) / 180),
+    r: 70 + (i % 4) * 24,
+    vx: (i % 2 === 0 ? 1 : -1) * (5 + (i % 3) * 2.5),
+    vy: (i % 3 === 0 ? 1 : -1) * (2 + (i % 2) * 1.5),
+    alpha: 0.05 + (i % 3) * 0.02,
   }));
 
   function drawFog(dt) {
+    // A static, ground-hugging haze beneath the drifting wisps — the lower the screen, the
+    // murkier it gets, so feet and low terrain features go soft while faces stay readable.
+    const groundMist = ctx.createLinearGradient(0, bounds.height * 0.5, 0, bounds.height);
+    groundMist.addColorStop(0, 'rgba(130,140,150,0)');
+    groundMist.addColorStop(1, 'rgba(130,140,150,0.12)');
+    ctx.fillStyle = groundMist;
+    ctx.fillRect(0, bounds.height * 0.5, bounds.width, bounds.height * 0.5);
+
     for (const f of FOG) {
       f.x += f.vx * dt;
       f.y += f.vy * dt;
       if (f.x < -f.r) f.x = bounds.width + f.r;
       if (f.x > bounds.width + f.r) f.x = -f.r;
-      if (f.y < -f.r) f.y = bounds.height + f.r;
-      if (f.y > bounds.height + f.r) f.y = -f.r;
+      if (f.y < bounds.height * 0.4) f.y = bounds.height * 0.4;
+      if (f.y > bounds.height + f.r) f.y = bounds.height * 0.4;
 
       const grad = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, f.r);
-      grad.addColorStop(0, `rgba(180,170,190,${f.alpha})`);
-      grad.addColorStop(1, 'rgba(180,170,190,0)');
+      grad.addColorStop(0, `rgba(120,130,138,${f.alpha})`);
+      grad.addColorStop(1, 'rgba(120,130,138,0)');
       ctx.fillStyle = grad;
       ctx.beginPath();
       ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2);
@@ -1149,13 +1246,42 @@
 
   function drawVignette() {
     const grad = ctx.createRadialGradient(
-      bounds.width / 2, bounds.height / 2, bounds.height * 0.2,
-      bounds.width / 2, bounds.height / 2, bounds.height * 0.75
+      bounds.width / 2, bounds.height / 2, bounds.height * 0.24,
+      bounds.width / 2, bounds.height / 2, bounds.height * 0.86
     );
     grad.addColorStop(0, 'rgba(0,0,0,0)');
-    grad.addColorStop(1, 'rgba(0,0,0,0.6)');
+    grad.addColorStop(0.75, 'rgba(4,3,6,0.32)');
+    grad.addColorStop(1, 'rgba(2,4,3,0.68)');
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, bounds.width, bounds.height);
+  }
+
+  // Precomputed film-grain tile, drawn once and reused as a repeating pattern each frame —
+  // cheap grit that keeps the scene from looking clean/digital.
+  const grainCanvas = document.createElement('canvas');
+  grainCanvas.width = 128;
+  grainCanvas.height = 128;
+  (function bakeGrain() {
+    const gctx = grainCanvas.getContext('2d');
+    const imgData = gctx.createImageData(128, 128);
+    for (let i = 0; i < imgData.data.length; i += 4) {
+      const v = Math.random() * 255;
+      imgData.data[i] = v;
+      imgData.data[i + 1] = v;
+      imgData.data[i + 2] = v;
+      imgData.data[i + 3] = 255;
+    }
+    gctx.putImageData(imgData, 0, 0);
+  })();
+  const grainPattern = ctx.createPattern(grainCanvas, 'repeat');
+
+  function drawGrain() {
+    ctx.save();
+    ctx.globalAlpha = 0.05;
+    ctx.globalCompositeOperation = 'overlay';
+    ctx.fillStyle = grainPattern;
+    ctx.fillRect(0, 0, bounds.width, bounds.height);
+    ctx.restore();
   }
 
   function drawStick(stick, color) {
@@ -1262,6 +1388,7 @@
 
   function render(dt) {
     drawArenaBackground(elapsed);
+    for (const bp of bloodPools) bp.draw(ctx);
     drawFenceConnections(ctx, fences);
     for (const mine of mines) mine.draw(ctx, elapsed);
     for (const fence of fences) fence.draw(ctx);
@@ -1283,6 +1410,7 @@
     drawFog(dt);
     drawDamageFlash();
     drawVignette();
+    drawGrain();
   }
 
   // ---------- Main loop ----------
