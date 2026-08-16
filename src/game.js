@@ -354,7 +354,8 @@
       if (!bullet.alive) continue;
       for (const enemy of enemies) {
         if (!enemy.alive || bullet.hitEnemies.has(enemy)) continue;
-        if (dist(bullet.x, bullet.y, enemy.x, enemy.y) <= bullet.radius + enemy.radius) {
+        const hitCenter = enemy.getHitCenter();
+        if (dist(bullet.x, bullet.y, hitCenter.x, hitCenter.y) <= bullet.radius + enemy.hitRadius) {
           enemy.takeDamage(bullet.damage);
           bullet.hitEnemies.add(enemy);
           if (!enemy.alive) gold += enemy.reward;
@@ -777,8 +778,8 @@
       paused,
       gold,
       wave: waveManager.waveNumber,
-      enemies: enemies.map((e) => ({ x: e.x, y: e.y, health: e.health })),
-      bullets: bullets.map((b) => ({ x: b.x, y: b.y, vx: b.vx, vy: b.vy, pierceRemaining: b.pierceRemaining })),
+      enemies: enemies.map((e) => ({ x: e.x, y: e.y, health: e.health, radius: e.radius, hitCenter: e.getHitCenter(), hitRadius: e.hitRadius })),
+      bullets: bullets.map((b) => ({ x: b.x, y: b.y, vx: b.vx, vy: b.vy, radius: b.radius, pierceRemaining: b.pierceRemaining })),
       player: {
         x: player.x,
         y: player.y,

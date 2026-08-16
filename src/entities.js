@@ -671,6 +671,21 @@ class Enemy {
     this._walkPhase = 0;
   }
 
+  /**
+   * Bullets need to hit the visible body, not just the feet: this.x/this.y is the ground
+   * anchor the 3/4-view rig stands on, but the drawn silhouette (legs+torso+head) rises
+   * roughly 2.8-3x the radius above that point. Centering the hit test there, with a
+   * correspondingly larger radius, is what makes headshots (and everything above the ankles)
+   * actually register instead of only the lowest sliver of drawn leg.
+   */
+  getHitCenter() {
+    return { x: this.x, y: this.y - this.radius * 1.45 };
+  }
+
+  get hitRadius() {
+    return this.radius * 1.55;
+  }
+
   update(dt, target) {
     const dir = normalize(target.x - this.x, target.y - this.y);
     this.angle = Math.atan2(dir.y, dir.x);

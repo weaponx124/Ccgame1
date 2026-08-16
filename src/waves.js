@@ -9,21 +9,26 @@ class WaveManager {
     this.active = false;
   }
 
-  /** Builds the composition of enemies for the given wave number. */
+  /**
+   * Builds the composition of enemies for the given wave number. Wave 1 is deliberately soft
+   * (a handful of zombies only, no HP scaling) so a fresh run with zero upgrades isn't
+   * overwhelming; difficulty then ramps gradually wave over wave as the player banks gold and
+   * buys stat upgrades / new weapons between hunts, rather than front-loading the spike.
+   */
   _buildWave(waveNumber) {
-    const waveScale = 1 + (waveNumber - 1) * 0.18; // enemies get tougher over time
+    const waveScale = 1 + Math.max(0, waveNumber - 1) * 0.12; // gentler HP ramp, still flat on wave 1
     const queue = [];
 
-    const zombieCount = 4 + waveNumber * 2;
+    const zombieCount = 3 + Math.floor(waveNumber * 1.4);
     for (let i = 0; i < zombieCount; i++) queue.push('zombie');
 
-    if (waveNumber >= 2) {
-      const vampireCount = 2 + Math.floor(waveNumber * 1.2);
+    if (waveNumber >= 3) {
+      const vampireCount = 1 + Math.floor((waveNumber - 2) * 1.0);
       for (let i = 0; i < vampireCount; i++) queue.push('vampire');
     }
 
-    if (waveNumber >= 3) {
-      const werewolfCount = Math.floor(waveNumber / 2);
+    if (waveNumber >= 5) {
+      const werewolfCount = Math.floor((waveNumber - 3) / 2);
       for (let i = 0; i < werewolfCount; i++) queue.push('werewolf');
     }
 
@@ -57,8 +62,8 @@ class WaveManager {
     this._spawnTimer -= dt;
     if (this._spawnTimer > 0) return null;
 
-    // Pace spawns a bit faster on later waves, but never instantaneous.
-    this._spawnTimer = clamp(0.9 - this.waveNumber * 0.03, 0.22, 0.9);
+    // Spawns trickle in slowly on early waves and pace up gradually — never instantaneous.
+    this._spawnTimer = clamp(1.15 - this.waveNumber * 0.035, 0.25, 1.15);
 
     const typeKey = this.spawnQueue.shift();
     const { x, y } = this._randomEdgePoint();
