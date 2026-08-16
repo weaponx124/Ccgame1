@@ -36,13 +36,23 @@
     restartBtn: document.getElementById('restart-btn'),
     startOverlay: document.getElementById('start-overlay'),
     startBtn: document.getElementById('start-btn'),
+    continueBtn: document.getElementById('continue-btn'),
+    pauseBtn: document.getElementById('pause-btn'),
+    pauseOverlay: document.getElementById('pause-overlay'),
+    resumeBtn: document.getElementById('resume-btn'),
+    saveQuitBtn: document.getElementById('save-quit-btn'),
   };
 
   // ---------- Game state ----------
-  let state; // 'playing' | 'shop' | 'gameover'
+  let state; // 'playing' | 'shop' | 'gameover' | 'menu'
+  let paused = false;
   let player, base, waveManager, shop;
   let bullets, enemies;
   let gold;
+
+  function setPauseButtonVisible(visible) {
+    el.pauseBtn.classList.toggle('hidden', !visible);
+  }
 
   function resetGame() {
     player = new Player(bounds.width / 2, bounds.height / 2 + 120);
@@ -63,6 +73,7 @@
     el.shopTitle.textContent = isFirst ? 'Prepare for Battle' : `Wave ${waveManager.waveNumber} Cleared!`;
     renderShopItems();
     el.shopOverlay.classList.remove('hidden');
+    setPauseButtonVisible(true);
   }
 
   function renderShopItems() {
@@ -101,15 +112,130 @@
 
   el.restartBtn.addEventListener('click', () => {
     el.gameoverOverlay.classList.add('hidden');
+    clearSave();
     resetGame();
     updateHud();
   });
 
   el.startBtn.addEventListener('click', () => {
+    if (loadGame() && !confirm('Start a new game? Your saved progress will be lost.')) return;
+    clearSave();
     el.startOverlay.classList.add('hidden');
     resetGame();
     updateHud();
   });
+
+  el.continueBtn.addEventListener('click', () => {
+    const snapshot = loadGame();
+    if (!snapshot) return;
+    el.startOverlay.classList.add('hidden');
+    applySnapshot(snapshot);
+  });
+
+  function refreshStartScreenSaveUI() {
+    const hasSave = !!loadGame();
+    el.continueBtn.classList.toggle('hidden', !hasSave);
+    el.startBtn.textContent = hasSave ? 'New Game' : 'Start Game';
+  }
+
+  // ---------- Pause / save / quit ----------
+  el.pauseBtn.addEventListener('click', () => {
+    paused = true;
+    el.pauseOverlay.classList.remove('hidden');
+  });
+
+  el.resumeBtn.addEventListener('click', () => {
+    paused = false;
+    el.pauseOverlay.classList.add('hidden');
+  });
+
+  el.saveQuitBtn.addEventListener('click', () => {
+    saveGame(buildSnapshot());
+    el.pauseOverlay.classList.add('hidden');
+    el.shopOverlay.classList.add('hidden');
+    paused = false;
+    state = 'menu';
+    setPauseButtonVisible(false);
+    refreshStartScreenSaveUI();
+    el.startOverlay.classList.remove('hidden');
+  });
+
+  function buildSnapshot() {
+    return {
+      v: 1,
+      savedPhase: state === 'shop' ? 'shop' : 'playing',
+      gold,
+      wave: waveManager.waveNumber,
+      waveActive: waveManager.active,
+      spawnQueue: [...waveManager.spawnQueue],
+      waveScale: waveManager.waveScale || 1,
+      spawnTimer: waveManager._spawnTimer,
+      player: {
+        x: player.x,
+        y: player.y,
+        health: player.health,
+        maxHealth: player.maxHealth,
+        speed: player.speed,
+        damage: player.damage,
+        fireRate: player.fireRate,
+        bulletSpeed: player.bulletSpeed,
+        critChance: player.critChance,
+      },
+      base: { health: base.health, maxHealth: base.maxHealth },
+      enemies: enemies.map((e) => ({ typeKey: e.typeKey, x: e.x, y: e.y, health: e.health, maxHealth: e.maxHealth })),
+      shopPurchaseCounts: { ...shop.purchaseCounts },
+    };
+  }
+
+  function applySnapshot(snapshot) {
+    player = new Player(snapshot.player.x, snapshot.player.y);
+    Object.assign(player, {
+      health: snapshot.player.health,
+      maxHealth: snapshot.player.maxHealth,
+      speed: snapshot.player.speed,
+      damage: snapshot.player.damage,
+      fireRate: snapshot.player.fireRate,
+      bulletSpeed: snapshot.player.bulletSpeed,
+      critChance: snapshot.player.critChance,
+    });
+
+    base = new Base(bounds.width / 2, bounds.height / 2);
+    base.maxHealth = snapshot.base.maxHealth;
+    base.health = snapshot.base.health;
+
+    waveManager = new WaveManager(bounds);
+    waveManager.waveNumber = snapshot.wave;
+    waveManager.active = snapshot.waveActive;
+    waveManager.spawnQueue = [...snapshot.spawnQueue];
+    waveManager.waveScale = snapshot.waveScale;
+    waveManager._spawnTimer = snapshot.spawnTimer;
+
+    shop = new Shop();
+    for (const id in snapshot.shopPurchaseCounts) {
+      if (id in shop.purchaseCounts) shop.purchaseCounts[id] = snapshot.shopPurchaseCounts[id];
+    }
+
+    bullets = [];
+    enemies = snapshot.enemies.map((e) => {
+      const enemy = new Enemy(e.x, e.y, e.typeKey, 1);
+      enemy.health = e.health;
+      enemy.maxHealth = e.maxHealth;
+      return enemy;
+    });
+
+    gold = snapshot.gold;
+    paused = false;
+    el.gameoverOverlay.classList.add('hidden');
+
+    if (snapshot.savedPhase === 'shop') {
+      openShop(snapshot.wave === 0);
+    } else {
+      state = 'playing';
+      el.shopOverlay.classList.add('hidden');
+      setPauseButtonVisible(true);
+    }
+    updateHud();
+  }
 
   // ---------- HUD ----------
   function updateHud() {
@@ -179,6 +305,8 @@
       state = 'gameover';
       el.finalWave.textContent = waveManager.waveNumber;
       el.gameoverOverlay.classList.remove('hidden');
+      setPauseButtonVisible(false);
+      clearSave();
       return;
     }
 
@@ -256,22 +384,28 @@
   function loop(now) {
     const dt = Math.min(0.05, (now - lastTime) / 1000); // clamp to avoid huge steps on tab-out
     lastTime = now;
-    update(dt);
+    if (!paused) update(dt);
     render();
     requestAnimationFrame(loop);
   }
 
   // Initialize a game instance so state exists even before "Start" is clicked.
   resetGame();
-  state = 'shop';
+  state = 'menu';
   el.shopOverlay.classList.add('hidden'); // hidden until player dismisses start screen
+  setPauseButtonVisible(false);
+  refreshStartScreenSaveUI();
   updateHud();
   requestAnimationFrame(loop);
 
   // Debug/test hook: read-only snapshot of live state, useful for automated smoke tests.
   window.__game = {
+    hasSave: () => !!loadGame(),
+    peekSave: () => loadGame(),
+    debugSetBaseHealth: (h) => { base.health = h; },
     getState: () => ({
       state,
+      paused,
       gold,
       wave: waveManager.waveNumber,
       enemies: enemies.map((e) => ({ x: e.x, y: e.y, health: e.health })),

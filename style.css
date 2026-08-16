@@ -49,6 +49,26 @@ html, body {
 
 /* ---------- HUD ---------- */
 
+#pause-btn {
+  position: absolute;
+  top: 10px;
+  left: 14px;
+  z-index: 15;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid #3a4258;
+  background: rgba(10, 12, 18, 0.6);
+  color: #e8ecf1;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+#pause-btn:hover {
+  background: rgba(20, 24, 34, 0.8);
+}
+
 #hud {
   position: absolute;
   top: 0;
@@ -57,10 +77,11 @@ html, body {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  padding: 10px 14px;
+  padding: 10px 14px 10px 56px;
   pointer-events: none;
   font-size: 14px;
   text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+  z-index: 10;
 }
 
 .hud-row {
@@ -128,20 +149,25 @@ html, body {
 
 /* ---------- Overlays ---------- */
 
-#shop-overlay, #gameover-overlay, #start-overlay {
+#shop-overlay, #gameover-overlay, #start-overlay, #pause-overlay {
   position: absolute;
   inset: 0;
   background: rgba(5, 6, 10, 0.85);
   display: flex;
   align-items: center;
   justify-content: center;
+  z-index: 20;
+}
+
+#pause-overlay {
+  z-index: 30;
 }
 
 .hidden {
   display: none !important;
 }
 
-#shop-panel, #gameover-panel, #start-panel {
+#shop-panel, #gameover-panel, #start-panel, #pause-panel {
   background: #171b26;
   border: 1px solid #2f3750;
   border-radius: 10px;
@@ -151,8 +177,15 @@ html, body {
   text-align: center;
 }
 
-#shop-panel h2, #gameover-panel h1, #start-panel h1 {
+#shop-panel h2, #gameover-panel h1, #start-panel h1, #pause-panel h2 {
   margin-top: 0;
+}
+
+.pause-actions, #start-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 16px;
 }
 
 #shop-subtitle {
@@ -214,7 +247,7 @@ html, body {
   background: #2f89e8;
 }
 
-#next-wave-btn, #restart-btn, #start-btn {
+#next-wave-btn, #restart-btn, #start-btn, #continue-btn, #resume-btn {
   background: #2fa04a;
   border: none;
   color: white;
@@ -226,8 +259,23 @@ html, body {
   margin-top: 6px;
 }
 
-#next-wave-btn:hover, #restart-btn:hover, #start-btn:hover {
+#next-wave-btn:hover, #restart-btn:hover, #start-btn:hover, #continue-btn:hover, #resume-btn:hover {
   background: #38bf59;
+}
+
+.btn-secondary {
+  background: #2f3750;
+  border: none;
+  color: #e8ecf1;
+  padding: 12px 22px;
+  font-size: 15px;
+  font-weight: 700;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.btn-secondary:hover {
+  background: #3a4460;
 }
 
 .controls-list {

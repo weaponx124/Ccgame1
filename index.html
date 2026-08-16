@@ -22,6 +22,8 @@
    <div id="stage">
     <canvas id="game-canvas" width="960" height="540"></canvas>
 
+    <button id="pause-btn" class="hidden" aria-label="Pause menu">&#10074;&#10074;</button>
+
     <div id="hud">
       <div id="hud-left">
         <div class="hud-row">Wave: <span id="wave-num">1</span></div>
@@ -59,6 +61,16 @@
       </div>
     </div>
 
+    <div id="pause-overlay" class="hidden">
+      <div id="pause-panel">
+        <h2>Paused</h2>
+        <div class="pause-actions">
+          <button id="resume-btn">Resume</button>
+          <button id="save-quit-btn" class="btn-secondary">Save &amp; Quit to Menu</button>
+        </div>
+      </div>
+    </div>
+
     <div id="start-overlay">
       <div id="start-panel">
         <h1>Base Defense</h1>
@@ -68,7 +80,10 @@
           <li><b>Right thumb</b> — drag to aim &amp; fire</li>
           <li class="controls-list-desktop"><b>WASD/mouse</b> — desktop fallback</li>
         </ul>
-        <button id="start-btn">Start Game</button>
+        <div id="start-actions">
+          <button id="continue-btn" class="hidden">Continue</button>
+          <button id="start-btn">Start Game</button>
+        </div>
       </div>
     </div>
    </div>
@@ -79,6 +94,7 @@
   <script src="src/entities.js"></script>
   <script src="src/waves.js"></script>
   <script src="src/shop.js"></script>
+  <script src="src/save.js"></script>
   <script src="src/game.js"></script>
 </body>
 </html>
