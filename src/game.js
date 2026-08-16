@@ -37,6 +37,7 @@
     shopOverlay: document.getElementById('shop-overlay'),
     shopItems: document.getElementById('shop-items'),
     weaponItems: document.getElementById('weapon-items'),
+    defenseItems: document.getElementById('defense-items'),
     shopTitle: document.getElementById('shop-title'),
     nextWaveBtn: document.getElementById('next-wave-btn'),
     gameoverOverlay: document.getElementById('gameover-overlay'),
@@ -57,6 +58,8 @@
   let paused = false;
   let player, base, waveManager, shop;
   let bullets, enemies;
+  let fences, mines, explosions;
+  let defensePurchaseCounts;
   let gold;
 
   function setPauseButtonVisible(visible) {
@@ -71,7 +74,11 @@
     shop = new Shop();
     bullets = [];
     enemies = [];
-    gold = 0;
+    fences = [];
+    mines = [];
+    explosions = [];
+    defensePurchaseCounts = { fence: 0, mine: 0 };
+    gold = 20; // enough for one small early purchase (a fence, a mine, or a cheap upgrade)
     state = 'shop';
     waveManager.waveNumber = 0; // startNextWave will bump to 1
     openShop(true);
@@ -83,8 +90,67 @@
     el.shopTitle.textContent = isFirst ? 'Prepare for the Hunt' : `Wave ${waveManager.waveNumber} Survived`;
     renderShopItems();
     renderWeaponItems();
+    renderDefenseItems();
     el.shopOverlay.classList.remove('hidden');
     setPauseButtonVisible(true);
+  }
+
+  function renderDefenseItems() {
+    el.defenseItems.innerHTML = '';
+
+    const fenceCount = defensePurchaseCounts.fence;
+    const fenceMaxed = fenceCount >= FENCE_MAX;
+    const fenceCost = costFor(FENCE_BASE_COST, FENCE_COST_GROWTH, fenceCount);
+    appendDefenseRow({
+      name: 'Wooden Fence',
+      desc: `Slows enemies that pass near it. ${fenceCount}/${FENCE_MAX} placed around the ward.`,
+      maxed: fenceMaxed,
+      cost: fenceCost,
+      onBuy: () => {
+        const pos = nextFencePosition(base, fenceCount);
+        fences.push(new Fence(pos.x, pos.y, fenceCount));
+        defensePurchaseCounts.fence += 1;
+      },
+    });
+
+    const mineCount = defensePurchaseCounts.mine;
+    const mineMaxed = mineCount >= MINE_MAX;
+    const mineCost = costFor(MINE_BASE_COST, MINE_COST_GROWTH, mineCount);
+    appendDefenseRow({
+      name: 'Buried Mine',
+      desc: `Explodes when a monster steps near. ${mineCount}/${MINE_MAX} buried in the field.`,
+      maxed: mineMaxed,
+      cost: mineCost,
+      onBuy: () => {
+        const pos = randomMinePosition(base, bounds, mines);
+        mines.push(new Mine(pos.x, pos.y, mineCount));
+        defensePurchaseCounts.mine += 1;
+      },
+    });
+  }
+
+  function appendDefenseRow({ name, desc, maxed, cost, onBuy }) {
+    const row = document.createElement('div');
+    row.className = 'shop-item';
+    row.innerHTML = `
+      <div class="shop-item-info">
+        <div class="shop-item-name">${name}${maxed ? ' (MAX)' : ''}</div>
+        <div class="shop-item-desc">${desc}</div>
+      </div>
+      <button class="shop-item-buy" ${maxed ? 'disabled' : ''}>${maxed ? 'MAX' : cost + 'g'}</button>
+    `;
+    const btn = row.querySelector('button');
+    btn.disabled = btn.disabled || gold < cost;
+    btn.addEventListener('click', () => {
+      if (gold < cost || maxed) return;
+      gold -= cost;
+      onBuy();
+      updateHud();
+      renderDefenseItems();
+      renderShopItems();
+      renderWeaponItems();
+    });
+    el.defenseItems.appendChild(row);
   }
 
   function renderWeaponItems() {
@@ -119,6 +185,7 @@
         updateHud();
         renderWeaponItems();
         renderShopItems();
+        renderDefenseItems();
       });
       el.weaponItems.appendChild(row);
     }
@@ -147,6 +214,7 @@
         updateHud();
         renderShopItems();
         renderWeaponItems();
+        renderDefenseItems();
       });
       el.shopItems.appendChild(row);
     }
@@ -240,6 +308,9 @@
       base: { health: base.health, maxHealth: base.maxHealth },
       enemies: enemies.map((e) => ({ typeKey: e.typeKey, x: e.x, y: e.y, health: e.health, maxHealth: e.maxHealth })),
       shopPurchaseCounts: { ...shop.purchaseCounts },
+      fences: fences.map((f) => ({ x: f.x, y: f.y, health: f.health, maxHealth: f.maxHealth })),
+      mines: mines.map((m) => ({ x: m.x, y: m.y, damage: m.damage, blastRadius: m.blastRadius })),
+      defensePurchaseCounts: { ...defensePurchaseCounts },
     };
   }
 
@@ -280,6 +351,23 @@
       enemy.maxHealth = e.maxHealth;
       return enemy;
     });
+
+    explosions = [];
+    fences = (snapshot.fences || []).map((f) => {
+      const fence = new Fence(f.x, f.y, 0);
+      fence.maxHealth = f.maxHealth;
+      fence.health = f.health;
+      return fence;
+    });
+    mines = (snapshot.mines || []).map((m) => {
+      const mine = new Mine(m.x, m.y, 0);
+      mine.damage = m.damage;
+      mine.blastRadius = m.blastRadius;
+      return mine;
+    });
+    defensePurchaseCounts = snapshot.defensePurchaseCounts
+      ? { ...snapshot.defensePurchaseCounts }
+      : { fence: 0, mine: 0 };
 
     gold = snapshot.gold;
     paused = false;
@@ -336,7 +424,19 @@
       const distToPlayer = dist(enemy.x, enemy.y, player.x, player.y);
       const distToBase = dist(enemy.x, enemy.y, base.x, base.y);
       const target = distToPlayer < distToBase ? player : base;
-      enemy.update(dt, target);
+
+      // Fences slow any enemy passing near them, and take ongoing damage from whoever is
+      // in contact — enough sustained pressure breaks a segment, but a couple of stragglers
+      // brushing past won't.
+      let speedMult = 1;
+      for (const fence of fences) {
+        if (!fence.alive) continue;
+        const fenceDist = dist(enemy.x, enemy.y, fence.x, fence.y);
+        if (fenceDist <= fence.slowRadius) speedMult = Math.min(speedMult, fence.slowMult);
+        if (fenceDist <= fence.radius + enemy.radius) fence.takeDamage(enemy.damage * dt);
+      }
+
+      enemy.update(dt, target, speedMult);
 
       if (dist(enemy.x, enemy.y, base.x, base.y) <= base.radius + enemy.radius) {
         base.takeDamage(enemy.damage);
@@ -346,6 +446,32 @@
         enemy.alive = false;
       }
     }
+    fences = fences.filter((f) => f.alive);
+
+    // Mines: the first enemy to step within range detonates it, dealing blast damage to
+    // every enemy caught in the radius (including itself) before the mine is consumed.
+    for (const mine of mines) {
+      if (!mine.alive) continue;
+      for (const enemy of enemies) {
+        if (!enemy.alive) continue;
+        if (dist(mine.x, mine.y, enemy.x, enemy.y) <= mine.triggerRadius + enemy.radius) {
+          mine.alive = false;
+          explosions.push(new Explosion(mine.x, mine.y, mine.blastRadius));
+          for (const victim of enemies) {
+            if (!victim.alive) continue;
+            if (dist(mine.x, mine.y, victim.x, victim.y) <= mine.blastRadius) {
+              victim.takeDamage(mine.damage);
+              if (!victim.alive) gold += victim.reward;
+            }
+          }
+          break;
+        }
+      }
+    }
+    mines = mines.filter((m) => m.alive);
+
+    for (const ex of explosions) ex.update(dt);
+    explosions = explosions.filter((e) => e.alive);
 
     // Bullet vs enemy collisions. Piercing bullets (pierceRemaining > 0) keep flying and can
     // hit more enemies, but never the same enemy twice — hitEnemies tracks who's already
@@ -390,6 +516,7 @@
     }
 
     if (waveManager.isWaveCleared(enemies.length)) {
+      gold += 10 + waveManager.waveNumber * 2; // wave-clear bonus, on top of per-kill gold
       waveManager.finishWave();
       openShop(false);
     }
@@ -730,10 +857,13 @@
 
   function render(dt) {
     drawArenaBackground(elapsed);
+    for (const mine of mines) mine.draw(ctx, elapsed);
+    for (const fence of fences) fence.draw(ctx);
     base.draw(ctx, elapsed);
     for (const enemy of enemies) enemy.draw(ctx);
     for (const bullet of bullets) bullet.draw(ctx, elapsed);
     if (state !== 'gameover') player.draw(ctx, elapsed);
+    for (const ex of explosions) ex.draw(ctx);
 
     if (state === 'playing') {
       drawStick(input.moveStick, 'rgba(79, 220, 111, 0.9)');
@@ -790,6 +920,9 @@
         muzzle: player.getMuzzlePosition(),
       },
       base: { x: base.x, y: base.y, health: base.health },
+      fences: fences.map((f) => ({ x: f.x, y: f.y, health: f.health, maxHealth: f.maxHealth })),
+      mines: mines.map((m) => ({ x: m.x, y: m.y, damage: m.damage, blastRadius: m.blastRadius })),
+      defensePurchaseCounts: { ...defensePurchaseCounts },
       moveStick: { active: input.moveStick.active, ...input.moveStick.read() },
       aimStick: { active: input.aimStick.active, ...input.aimStick.read() },
     }),

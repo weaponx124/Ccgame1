@@ -686,12 +686,14 @@ class Enemy {
     return this.radius * 1.55;
   }
 
-  update(dt, target) {
+  /** speedMult lets fences (or future effects) slow an enemy for this frame without touching its base speed. */
+  update(dt, target, speedMult = 1) {
     const dir = normalize(target.x - this.x, target.y - this.y);
     this.angle = Math.atan2(dir.y, dir.x);
-    this.x += dir.x * this.speed * dt;
-    this.y += dir.y * this.speed * dt;
-    this._walkPhase += this.speed * dt * 0.05;
+    const effectiveSpeed = this.speed * speedMult;
+    this.x += dir.x * effectiveSpeed * dt;
+    this.y += dir.y * effectiveSpeed * dt;
+    this._walkPhase += effectiveSpeed * dt * 0.05;
     if (this._hitFlash > 0) this._hitFlash -= dt;
   }
 

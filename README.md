@@ -45,6 +45,8 @@ Desktop fallback (used automatically until the page detects a touch):
 - `src/entities.js` — `Player`, `Base`, `Bullet`, `Enemy` classes
 - `src/weapons.js` — the weapon catalog (stats + firing pattern + visuals)
   for the loadout system
+- `src/defenses.js` — `Fence`, `Mine`, `Explosion` classes and the
+  auto-placement logic for the base-defense shop section
 - `src/waves.js` — `WaveManager`, which builds and paces enemy spawns per wave
 - `src/shop.js` — the stat-upgrade catalog and purchase logic
 - `src/game.js` — the main update/render loop, viewport scaling, and state
@@ -92,6 +94,15 @@ None of that is done yet; this repo is still the pure web build.
   one-time unlocks in the shop's Weapons section. Switch between owned
   weapons anytime with the HUD button next to Gold. Shop stat upgrades
   (damage, fire rate, etc.) apply on top of whichever weapon is equipped
+- A base-defense economy: you start with a small amount of gold (enough
+  for one early fence, mine, or cheap upgrade), earn more per kill, and
+  now also get a wave-clear bonus. The shop's Defenses section sells
+  Wooden Fences (auto-placed one at a time into a ring around the ward;
+  slow any enemy that passes near, and take contact damage until they
+  break) and Buried Mines (auto-scattered in the approach field;
+  one-shot AoE that detonates on the first enemy to step near). Both
+  get a little stronger each time you buy another, so early investment
+  keeps paying off as the perimeter grows
 
 ## Ideas for expanding
 
