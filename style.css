@@ -1,0 +1,215 @@
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: #0b0d12;
+  color: #e8ecf1;
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  overflow: hidden;
+  height: 100%;
+}
+
+#game-container {
+  position: relative;
+  width: 960px;
+  height: 640px;
+  margin: 24px auto;
+  box-shadow: 0 0 0 2px #2a3040, 0 20px 60px rgba(0,0,0,0.6);
+}
+
+#game-canvas {
+  display: block;
+  background: #12151c;
+  cursor: crosshair;
+}
+
+/* ---------- HUD ---------- */
+
+#hud {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 10px 14px;
+  pointer-events: none;
+  font-size: 14px;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+}
+
+.hud-row {
+  margin-bottom: 4px;
+}
+
+#hud-right {
+  text-align: right;
+}
+
+#hud-right #gold-amount {
+  color: #f7d354;
+  font-weight: 700;
+}
+
+#hud-center {
+  min-width: 220px;
+}
+
+.bar {
+  position: relative;
+  width: 220px;
+  height: 20px;
+  background: rgba(0,0,0,0.5);
+  border: 1px solid #3a4258;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.bar-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  background: linear-gradient(90deg, #3fa9f5, #2472c8);
+  transition: width 0.15s ease-out;
+}
+
+#player-health-bar .bar-fill {
+  background: linear-gradient(90deg, #4fdc6f, #2fa04a);
+}
+
+.bar-label {
+  position: relative;
+  z-index: 1;
+  display: block;
+  text-align: center;
+  line-height: 20px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+#player-status {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+#player-status .bar {
+  width: 200px;
+}
+
+/* ---------- Overlays ---------- */
+
+#shop-overlay, #gameover-overlay, #start-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(5, 6, 10, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hidden {
+  display: none !important;
+}
+
+#shop-panel, #gameover-panel, #start-panel {
+  background: #171b26;
+  border: 1px solid #2f3750;
+  border-radius: 10px;
+  padding: 28px 32px;
+  width: 480px;
+  max-width: 90%;
+  text-align: center;
+}
+
+#shop-panel h2, #gameover-panel h1, #start-panel h1 {
+  margin-top: 0;
+}
+
+#shop-subtitle {
+  color: #9aa4bd;
+  margin-top: -6px;
+  font-size: 13px;
+}
+
+#shop-items {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 18px 0;
+}
+
+.shop-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #1e2333;
+  border: 1px solid #2f3750;
+  border-radius: 6px;
+  padding: 10px 14px;
+  text-align: left;
+}
+
+.shop-item-info {
+  flex: 1;
+}
+
+.shop-item-name {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.shop-item-desc {
+  font-size: 12px;
+  color: #9aa4bd;
+}
+
+.shop-item-buy {
+  background: #2472c8;
+  border: none;
+  color: white;
+  padding: 8px 14px;
+  border-radius: 5px;
+  font-weight: 600;
+  cursor: pointer;
+  min-width: 84px;
+}
+
+.shop-item-buy:disabled {
+  background: #3a4258;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.shop-item-buy:hover:not(:disabled) {
+  background: #2f89e8;
+}
+
+#next-wave-btn, #restart-btn, #start-btn {
+  background: #2fa04a;
+  border: none;
+  color: white;
+  padding: 12px 22px;
+  font-size: 15px;
+  font-weight: 700;
+  border-radius: 6px;
+  cursor: pointer;
+  margin-top: 6px;
+}
+
+#next-wave-btn:hover, #restart-btn:hover, #start-btn:hover {
+  background: #38bf59;
+}
+
+.controls-list {
+  text-align: left;
+  display: inline-block;
+  color: #c3cadb;
+  font-size: 14px;
+}

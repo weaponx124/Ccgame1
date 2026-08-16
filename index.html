@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Base Defense</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22><rect width=%2232%22 height=%2232%22 fill=%22%2312151c%22/><rect x=%228%22 y=%228%22 width=%2216%22 height=%2216%22 fill=%22%232472c8%22/></svg>">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="game-container">
+    <canvas id="game-canvas" width="960" height="640"></canvas>
+
+    <div id="hud">
+      <div id="hud-left">
+        <div class="hud-row">Wave: <span id="wave-num">1</span></div>
+        <div class="hud-row">Enemies: <span id="enemies-left">0</span></div>
+      </div>
+      <div id="hud-center">
+        <div class="bar" id="base-health-bar">
+          <div class="bar-fill" id="base-health-fill"></div>
+          <span class="bar-label">Base HP: <span id="base-health-text"></span></span>
+        </div>
+      </div>
+      <div id="hud-right">
+        <div class="hud-row">Gold: <span id="gold-amount">0</span></div>
+      </div>
+    </div>
+
+    <div id="player-status">
+      <div class="bar" id="player-health-bar">
+        <div class="bar-fill" id="player-health-fill"></div>
+        <span class="bar-label">HP: <span id="player-health-text"></span></span>
+      </div>
+    </div>
+
+    <div id="shop-overlay" class="hidden">
+      <div id="shop-panel">
+        <h2 id="shop-title">Wave Cleared!</h2>
+        <p id="shop-subtitle">Spend your gold before the next wave.</p>
+        <div id="shop-items"></div>
+        <button id="next-wave-btn">Start Next Wave &rarr;</button>
+      </div>
+    </div>
+
+    <div id="gameover-overlay" class="hidden">
+      <div id="gameover-panel">
+        <h1>Base Destroyed</h1>
+        <p>You survived to wave <span id="final-wave">1</span>.</p>
+        <button id="restart-btn">Restart</button>
+      </div>
+    </div>
+
+    <div id="start-overlay">
+      <div id="start-panel">
+        <h1>Base Defense</h1>
+        <p>Waves of enemies will attack your base. Defend it, earn gold, and buy upgrades between waves.</p>
+        <ul class="controls-list">
+          <li><b>WASD / Arrows</b> — move</li>
+          <li><b>Mouse</b> — aim</li>
+          <li><b>Click / Hold</b> — shoot</li>
+        </ul>
+        <button id="start-btn">Start Game</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="src/vector.js"></script>
+  <script src="src/entities.js"></script>
+  <script src="src/waves.js"></script>
+  <script src="src/shop.js"></script>
+  <script src="src/game.js"></script>
+</body>
+</html>
