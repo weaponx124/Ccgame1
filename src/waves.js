@@ -14,17 +14,17 @@ class WaveManager {
     const waveScale = 1 + (waveNumber - 1) * 0.18; // enemies get tougher over time
     const queue = [];
 
-    const gruntCount = 4 + waveNumber * 2;
-    for (let i = 0; i < gruntCount; i++) queue.push('grunt');
+    const zombieCount = 4 + waveNumber * 2;
+    for (let i = 0; i < zombieCount; i++) queue.push('zombie');
 
     if (waveNumber >= 2) {
-      const runnerCount = 2 + Math.floor(waveNumber * 1.2);
-      for (let i = 0; i < runnerCount; i++) queue.push('runner');
+      const vampireCount = 2 + Math.floor(waveNumber * 1.2);
+      for (let i = 0; i < vampireCount; i++) queue.push('vampire');
     }
 
     if (waveNumber >= 3) {
-      const tankCount = Math.floor(waveNumber / 2);
-      for (let i = 0; i < tankCount; i++) queue.push('tank');
+      const werewolfCount = Math.floor(waveNumber / 2);
+      for (let i = 0; i < werewolfCount; i++) queue.push('werewolf');
     }
 
     // Shuffle so enemy types are interleaved rather than clumped.

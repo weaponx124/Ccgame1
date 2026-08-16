@@ -4,15 +4,15 @@
 const SHOP_CATALOG = [
   {
     id: 'damage',
-    name: 'Sharper Rounds',
-    desc: '+4 bullet damage',
+    name: 'Blessed Silver',
+    desc: '+4 bolt damage',
     baseCost: 25,
     costGrowth: 1.35,
     apply: (player) => { player.damage += 4; },
   },
   {
     id: 'fireRate',
-    name: 'Rapid Fire',
+    name: "Hunter's Haste",
     desc: '+0.6 shots/sec',
     baseCost: 30,
     costGrowth: 1.4,
@@ -20,7 +20,7 @@ const SHOP_CATALOG = [
   },
   {
     id: 'moveSpeed',
-    name: 'Light Boots',
+    name: "Grave Runner's Boots",
     desc: '+18 move speed',
     baseCost: 18,
     costGrowth: 1.3,
@@ -28,7 +28,7 @@ const SHOP_CATALOG = [
   },
   {
     id: 'maxHealth',
-    name: 'Reinforced Vest',
+    name: 'Vitality Rite',
     desc: '+20 max HP & full heal',
     baseCost: 22,
     costGrowth: 1.32,
@@ -36,7 +36,7 @@ const SHOP_CATALOG = [
   },
   {
     id: 'crit',
-    name: 'Precision Scope',
+    name: "Hunter's Eye",
     desc: '+8% crit chance (2x dmg)',
     baseCost: 35,
     costGrowth: 1.45,
@@ -45,8 +45,8 @@ const SHOP_CATALOG = [
   },
   {
     id: 'baseRepair',
-    name: 'Base Repair Crew',
-    desc: 'Fully repair the base',
+    name: 'Rite of Mending',
+    desc: 'Fully repair the ward',
     baseCost: 20,
     costGrowth: 1.15,
     apply: (player, base) => { base.health = base.maxHealth; },

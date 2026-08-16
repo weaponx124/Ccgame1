@@ -6,6 +6,13 @@
   const bounds = { width: canvas.width, height: canvas.height };
   const input = new InputManager(canvas, bounds);
 
+  // Render at native device pixel density so gradients/shading stay crisp on phones,
+  // while all game math keeps using the logical 960x540 `bounds` above.
+  const dpr = Math.min(window.devicePixelRatio || 1, 3);
+  canvas.width = bounds.width * dpr;
+  canvas.height = bounds.height * dpr;
+  ctx.scale(dpr, dpr);
+
   // ---------- Responsive fit ----------
   // The canvas keeps a fixed logical resolution; only its CSS size changes so it
   // letterboxes cleanly into any phone (or desktop) viewport without touching game math.
@@ -70,7 +77,7 @@
   // ---------- Shop UI ----------
   function openShop(isFirst = false) {
     state = 'shop';
-    el.shopTitle.textContent = isFirst ? 'Prepare for Battle' : `Wave ${waveManager.waveNumber} Cleared!`;
+    el.shopTitle.textContent = isFirst ? 'Prepare for the Hunt' : `Wave ${waveManager.waveNumber} Survived`;
     renderShopItems();
     el.shopOverlay.classList.remove('hidden');
     setPauseButtonVisible(true);
@@ -327,12 +334,63 @@
     updateHud();
   }
 
-  // ---------- Render ----------
+  // ---------- Render: gothic graveyard atmosphere ----------
+  // Fixed decorative tombstones, kept out of the central play area.
+  const TOMBSTONES = [
+    { x: 55, y: 70, scale: 1.0, rot: -0.12 },
+    { x: 905, y: 85, scale: 0.85, rot: 0.16 },
+    { x: 40, y: 465, scale: 1.1, rot: 0.06 },
+    { x: 915, y: 470, scale: 0.9, rot: -0.09 },
+    { x: 480, y: 34, scale: 0.7, rot: 0.02 },
+    { x: 180, y: 500, scale: 0.75, rot: -0.05 },
+  ];
+
+  function drawTombstone(x, y, scale, rot) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(rot);
+    ctx.scale(scale, scale);
+
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.beginPath();
+    ctx.ellipse(2, 24, 17, 6, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    const grad = ctx.createLinearGradient(-14, -22, 14, 20);
+    grad.addColorStop(0, '#3a3440');
+    grad.addColorStop(1, '#141018');
+    ctx.fillStyle = grad;
+    ctx.strokeStyle = 'rgba(140,120,100,0.35)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(-14, 20);
+    ctx.lineTo(-14, -8);
+    ctx.arc(0, -8, 14, Math.PI, 0);
+    ctx.lineTo(14, 20);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(0, -10);
+    ctx.lineTo(0, 8);
+    ctx.moveTo(-6, -2);
+    ctx.lineTo(6, -2);
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
   function drawArenaBackground() {
-    ctx.fillStyle = '#12151c';
+    const grad = ctx.createLinearGradient(0, 0, 0, bounds.height);
+    grad.addColorStop(0, '#1a1420');
+    grad.addColorStop(1, '#0c0810');
+    ctx.fillStyle = grad;
     ctx.fillRect(0, 0, bounds.width, bounds.height);
 
-    ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+    ctx.strokeStyle = 'rgba(140,120,150,0.05)';
     ctx.lineWidth = 1;
     const step = 40;
     for (let x = 0; x <= bounds.width; x += step) {
@@ -347,6 +405,48 @@
       ctx.lineTo(bounds.width, y);
       ctx.stroke();
     }
+
+    for (const t of TOMBSTONES) drawTombstone(t.x, t.y, t.scale, t.rot);
+  }
+
+  // Slow-drifting fog wisps for atmosphere.
+  const FOG = Array.from({ length: 12 }, (_, i) => ({
+    x: (i * 137) % bounds.width,
+    y: (i * 251) % bounds.height,
+    r: 60 + (i % 4) * 20,
+    vx: (i % 2 === 0 ? 1 : -1) * (6 + (i % 3) * 3),
+    vy: (i % 3 === 0 ? 1 : -1) * (3 + (i % 2) * 2),
+    alpha: 0.03 + (i % 3) * 0.015,
+  }));
+
+  function drawFog(dt) {
+    for (const f of FOG) {
+      f.x += f.vx * dt;
+      f.y += f.vy * dt;
+      if (f.x < -f.r) f.x = bounds.width + f.r;
+      if (f.x > bounds.width + f.r) f.x = -f.r;
+      if (f.y < -f.r) f.y = bounds.height + f.r;
+      if (f.y > bounds.height + f.r) f.y = -f.r;
+
+      const grad = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, f.r);
+      grad.addColorStop(0, `rgba(180,170,190,${f.alpha})`);
+      grad.addColorStop(1, 'rgba(180,170,190,0)');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  function drawVignette() {
+    const grad = ctx.createRadialGradient(
+      bounds.width / 2, bounds.height / 2, bounds.height * 0.2,
+      bounds.width / 2, bounds.height / 2, bounds.height * 0.75
+    );
+    grad.addColorStop(0, 'rgba(0,0,0,0)');
+    grad.addColorStop(1, 'rgba(0,0,0,0.6)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, bounds.width, bounds.height);
   }
 
   function drawStick(stick, color) {
@@ -366,9 +466,9 @@
     ctx.restore();
   }
 
-  function render() {
+  function render(dt) {
     drawArenaBackground();
-    base.draw(ctx);
+    base.draw(ctx, elapsed);
     for (const enemy of enemies) enemy.draw(ctx);
     for (const bullet of bullets) bullet.draw(ctx);
     if (state !== 'gameover') player.draw(ctx);
@@ -377,15 +477,20 @@
       drawStick(input.moveStick, 'rgba(79, 220, 111, 0.9)');
       drawStick(input.aimStick, 'rgba(255, 95, 95, 0.9)');
     }
+
+    drawFog(dt);
+    drawVignette();
   }
 
   // ---------- Main loop ----------
   let lastTime = performance.now();
+  let elapsed = 0; // drives ambient effects (rune pulse, fog drift) even while paused
   function loop(now) {
     const dt = Math.min(0.05, (now - lastTime) / 1000); // clamp to avoid huge steps on tab-out
     lastTime = now;
+    elapsed += dt;
     if (!paused) update(dt);
-    render();
+    render(dt);
     requestAnimationFrame(loop);
   }
 
@@ -403,6 +508,8 @@
     hasSave: () => !!loadGame(),
     peekSave: () => loadGame(),
     debugSetBaseHealth: (h) => { base.health = h; },
+    debugSpawn: (typeKey, x, y) => { enemies.push(new Enemy(x, y, typeKey, 1)); },
+    debugSetPaused: (v) => { paused = v; },
     getState: () => ({
       state,
       paused,

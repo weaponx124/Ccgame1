@@ -6,8 +6,11 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
-<title>Base Defense</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22><rect width=%2232%22 height=%2232%22 fill=%22%2312151c%22/><rect x=%228%22 y=%228%22 width=%2216%22 height=%2216%22 fill=%22%232472c8%22/></svg>">
+<title>Nightward</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22><rect width=%2232%22 height=%2232%22 fill=%22%23050308%22/><path d=%22M16 5 L23 12 L20 27 L16 23 L12 27 L9 12 Z%22 fill=%22%237d1f2e%22 stroke=%22%23c9a44c%22 stroke-width=%221%22/></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -32,7 +35,7 @@
       <div id="hud-center">
         <div class="bar" id="base-health-bar">
           <div class="bar-fill" id="base-health-fill"></div>
-          <span class="bar-label">Base HP: <span id="base-health-text"></span></span>
+          <span class="bar-label">Ward HP: <span id="base-health-text"></span></span>
         </div>
         <div class="bar" id="player-health-bar">
           <div class="bar-fill" id="player-health-fill"></div>
@@ -47,7 +50,7 @@
     <div id="shop-overlay" class="hidden">
       <div id="shop-panel">
         <h2 id="shop-title">Wave Cleared!</h2>
-        <p id="shop-subtitle">Spend your gold before the next wave.</p>
+        <p id="shop-subtitle">Spend your gold before the next wave descends.</p>
         <div id="shop-items"></div>
         <button id="next-wave-btn">Start Next Wave &rarr;</button>
       </div>
@@ -55,17 +58,17 @@
 
     <div id="gameover-overlay" class="hidden">
       <div id="gameover-panel">
-        <h1>Base Destroyed</h1>
-        <p>You survived to wave <span id="final-wave">1</span>.</p>
+        <h1>The Ward Has Fallen</h1>
+        <p>You held the line through wave <span id="final-wave">1</span>.</p>
         <button id="restart-btn">Restart</button>
       </div>
     </div>
 
     <div id="pause-overlay" class="hidden">
       <div id="pause-panel">
-        <h2>Paused</h2>
+        <h2>The Hunt Pauses</h2>
         <div class="pause-actions">
-          <button id="resume-btn">Resume</button>
+          <button id="resume-btn">Resume the Hunt</button>
           <button id="save-quit-btn" class="btn-secondary">Save &amp; Quit to Menu</button>
         </div>
       </div>
@@ -73,8 +76,8 @@
 
     <div id="start-overlay">
       <div id="start-panel">
-        <h1>Base Defense</h1>
-        <p>Waves of enemies will attack your base. Defend it, earn gold, and buy upgrades between waves.</p>
+        <h1>Nightward</h1>
+        <p>You are the last demon hunter standing between the ward and the night. Zombies, vampires, and werewolves rise in waves — slay them, gather gold, and arm yourself between hunts.</p>
         <ul class="controls-list">
           <li><b>Left thumb</b> — drag to move</li>
           <li><b>Right thumb</b> — drag to aim &amp; fire</li>

@@ -1,9 +1,9 @@
-# Base Defense
+# Nightward
 
-A top-down wave shooter proof of concept, built mobile-first with the App
-Store as the eventual target. Defend the base at the center of the arena
-from waves of enemies, earn gold from kills, and spend it on upgrades
-between waves.
+A top-down gothic wave shooter proof of concept, built mobile-first with the
+App Store as the eventual target. You're the last demon hunter defending a
+warded altar from waves of zombies, vampires, and werewolves — earn gold
+from kills and spend it on upgrades between hunts.
 
 ## Running it
 
@@ -69,17 +69,22 @@ None of that is done yet; this repo is still the pure web build.
 
 ## Current proof-of-concept scope
 
-- One arena, one base, one player character
-- Three enemy types (grunt, runner, tank) that scale in strength each wave
-- Six purchasable upgrades (damage, fire rate, move speed, max HP, crit
-  chance, base repair)
-- Base destroyed = game over; player death just costs some gold and respawns
+- One arena, one warded altar to defend, one demon hunter
+- Three monster types (zombie, vampire, werewolf) that scale in strength
+  each wave
+- Six purchasable upgrades (bolt damage, fire rate, move speed, max HP,
+  crit chance, ward repair)
+- Ward destroyed = game over; hunter death just costs some gold and respawns
+- Gothic visual pass: gradient/shadow shading for pseudo-3D volume, drifting
+  fog, a vignette, decorative tombstones, and a pulsing rune-glow altar —
+  all Canvas 2D tricks, no actual 3D or external art assets
 
 ## Ideas for expanding
 
 - Multiple lanes/directions of attack, or a larger map with sightlines
-- Placeable turrets/defenses instead of (or alongside) the shop
-- Weapon variety (shotgun, rocket, laser) as purchasable/swappable loadouts
-- Boss waves, enemy special abilities (ranged attackers, shielded units)
+- Placeable turrets/wards instead of (or alongside) the shop
+- Weapon variety (holy water flasks, silver shotgun shells, hunter's
+  chakram) as purchasable/swappable loadouts
+- Boss waves, monster special abilities (ranged hexes, shielded revenants)
 - Persistent meta-progression between runs
-- Sound and visual effects/juice
+- Sound and further visual effects/juice (screen shake, blood/dust particles)
