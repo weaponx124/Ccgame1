@@ -36,6 +36,7 @@
     playerHealthText: document.getElementById('player-health-text'),
     shopOverlay: document.getElementById('shop-overlay'),
     shopItems: document.getElementById('shop-items'),
+    weaponItems: document.getElementById('weapon-items'),
     shopTitle: document.getElementById('shop-title'),
     nextWaveBtn: document.getElementById('next-wave-btn'),
     gameoverOverlay: document.getElementById('gameover-overlay'),
@@ -48,6 +49,7 @@
     pauseOverlay: document.getElementById('pause-overlay'),
     resumeBtn: document.getElementById('resume-btn'),
     saveQuitBtn: document.getElementById('save-quit-btn'),
+    weaponSwitchBtn: document.getElementById('weapon-switch-btn'),
   };
 
   // ---------- Game state ----------
@@ -59,6 +61,7 @@
 
   function setPauseButtonVisible(visible) {
     el.pauseBtn.classList.toggle('hidden', !visible);
+    el.weaponSwitchBtn.classList.toggle('hidden', !visible);
   }
 
   function resetGame() {
@@ -79,8 +82,46 @@
     state = 'shop';
     el.shopTitle.textContent = isFirst ? 'Prepare for the Hunt' : `Wave ${waveManager.waveNumber} Survived`;
     renderShopItems();
+    renderWeaponItems();
     el.shopOverlay.classList.remove('hidden');
     setPauseButtonVisible(true);
+  }
+
+  function renderWeaponItems() {
+    el.weaponItems.innerHTML = '';
+    for (const id of WEAPON_ORDER) {
+      const weapon = WEAPON_TYPES[id];
+      const owned = player.unlockedWeapons.includes(id);
+      const equipped = player.equippedWeapon === id;
+      const row = document.createElement('div');
+      row.className = 'shop-item';
+      row.innerHTML = `
+        <div class="shop-item-info">
+          <div class="shop-item-name">${weapon.name}${equipped ? ' (Equipped)' : ''}</div>
+          <div class="shop-item-desc">${weapon.desc}</div>
+        </div>
+        <button class="shop-item-buy">${owned ? (equipped ? 'Equipped' : 'Equip') : weapon.unlockCost + 'g'}</button>
+      `;
+      const btn = row.querySelector('button');
+      if (equipped) {
+        btn.disabled = true;
+      } else if (!owned) {
+        btn.disabled = gold < weapon.unlockCost;
+      }
+      btn.addEventListener('click', () => {
+        if (equipped) return;
+        if (!owned) {
+          if (gold < weapon.unlockCost) return;
+          gold -= weapon.unlockCost;
+          player.unlockedWeapons.push(id);
+        }
+        player.equippedWeapon = id;
+        updateHud();
+        renderWeaponItems();
+        renderShopItems();
+      });
+      el.weaponItems.appendChild(row);
+    }
   }
 
   function renderShopItems() {
@@ -105,6 +146,7 @@
         shop.buy(item, player, base);
         updateHud();
         renderShopItems();
+        renderWeaponItems();
       });
       el.shopItems.appendChild(row);
     }
@@ -144,6 +186,11 @@
     el.continueBtn.classList.toggle('hidden', !hasSave);
     el.startBtn.textContent = hasSave ? 'New Game' : 'Start Game';
   }
+
+  el.weaponSwitchBtn.addEventListener('click', () => {
+    player.swapWeapon();
+    updateHud();
+  });
 
   // ---------- Pause / save / quit ----------
   el.pauseBtn.addEventListener('click', () => {
@@ -187,6 +234,8 @@
         fireRate: player.fireRate,
         bulletSpeed: player.bulletSpeed,
         critChance: player.critChance,
+        unlockedWeapons: [...player.unlockedWeapons],
+        equippedWeapon: player.equippedWeapon,
       },
       base: { health: base.health, maxHealth: base.maxHealth },
       enemies: enemies.map((e) => ({ typeKey: e.typeKey, x: e.x, y: e.y, health: e.health, maxHealth: e.maxHealth })),
@@ -204,6 +253,8 @@
       fireRate: snapshot.player.fireRate,
       bulletSpeed: snapshot.player.bulletSpeed,
       critChance: snapshot.player.critChance,
+      unlockedWeapons: snapshot.player.unlockedWeapons ? [...snapshot.player.unlockedWeapons] : ['crossbow'],
+      equippedWeapon: snapshot.player.equippedWeapon || 'crossbow',
     });
 
     base = new Base(bounds.width / 2, bounds.height / 2);
@@ -257,6 +308,11 @@
     const playerPct = clamp(player.health / player.maxHealth, 0, 1) * 100;
     el.playerHealthFill.style.width = playerPct + '%';
     el.playerHealthText.textContent = `${Math.ceil(player.health)}/${player.maxHealth}`;
+
+    const weapon = WEAPON_TYPES[player.equippedWeapon];
+    el.weaponSwitchBtn.textContent = player.unlockedWeapons.length > 1
+      ? `${weapon.shortName} ⇄`
+      : weapon.shortName;
   }
 
   // ---------- Update ----------
@@ -266,8 +322,7 @@
     const control = input.getControlState(player.x, player.y, player.aimAngle);
     player.update(dt, control, bounds);
     if (control.firing) {
-      const bullet = player.tryFire();
-      if (bullet) bullets.push(bullet);
+      bullets.push(...player.tryFire());
     }
 
     for (const b of bullets) b.update(dt, bounds);
@@ -292,16 +347,23 @@
       }
     }
 
-    // Bullet vs enemy collisions
+    // Bullet vs enemy collisions. Piercing bullets (pierceRemaining > 0) keep flying and can
+    // hit more enemies, but never the same enemy twice — hitEnemies tracks who's already
+    // been hit so an overlapping pierce shot can't multi-tick damage on one target.
     for (const bullet of bullets) {
       if (!bullet.alive) continue;
       for (const enemy of enemies) {
-        if (!enemy.alive) continue;
+        if (!enemy.alive || bullet.hitEnemies.has(enemy)) continue;
         if (dist(bullet.x, bullet.y, enemy.x, enemy.y) <= bullet.radius + enemy.radius) {
           enemy.takeDamage(bullet.damage);
-          bullet.alive = false;
+          bullet.hitEnemies.add(enemy);
           if (!enemy.alive) gold += enemy.reward;
-          break;
+          if (bullet.pierceRemaining > 0) {
+            bullet.pierceRemaining -= 1;
+          } else {
+            bullet.alive = false;
+            break;
+          }
         }
       }
     }
@@ -669,8 +731,8 @@
     drawArenaBackground(elapsed);
     base.draw(ctx, elapsed);
     for (const enemy of enemies) enemy.draw(ctx);
-    for (const bullet of bullets) bullet.draw(ctx);
-    if (state !== 'gameover') player.draw(ctx);
+    for (const bullet of bullets) bullet.draw(ctx, elapsed);
+    if (state !== 'gameover') player.draw(ctx, elapsed);
 
     if (state === 'playing') {
       drawStick(input.moveStick, 'rgba(79, 220, 111, 0.9)');
@@ -707,6 +769,7 @@
     hasSave: () => !!loadGame(),
     peekSave: () => loadGame(),
     debugSetBaseHealth: (h) => { base.health = h; },
+    debugSetGold: (g) => { gold = g; updateHud(); },
     debugSpawn: (typeKey, x, y) => { enemies.push(new Enemy(x, y, typeKey, 1)); },
     debugSetPaused: (v) => { paused = v; },
     getState: () => ({
@@ -715,8 +778,16 @@
       gold,
       wave: waveManager.waveNumber,
       enemies: enemies.map((e) => ({ x: e.x, y: e.y, health: e.health })),
-      bullets: bullets.length,
-      player: { x: player.x, y: player.y, health: player.health },
+      bullets: bullets.map((b) => ({ x: b.x, y: b.y, vx: b.vx, vy: b.vy, pierceRemaining: b.pierceRemaining })),
+      player: {
+        x: player.x,
+        y: player.y,
+        health: player.health,
+        aimAngle: player.aimAngle,
+        equippedWeapon: player.equippedWeapon,
+        unlockedWeapons: [...player.unlockedWeapons],
+        muzzle: player.getMuzzlePosition(),
+      },
       base: { x: base.x, y: base.y, health: base.health },
       moveStick: { active: input.moveStick.active, ...input.moveStick.read() },
       aimStick: { active: input.aimStick.active, ...input.aimStick.read() },

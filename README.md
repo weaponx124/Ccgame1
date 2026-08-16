@@ -43,8 +43,10 @@ Desktop fallback (used automatically until the page detects a touch):
 - `src/input.js` — `InputManager`, unifying keyboard/mouse and dual virtual
   joystick touch input into one per-frame control state
 - `src/entities.js` — `Player`, `Base`, `Bullet`, `Enemy` classes
+- `src/weapons.js` — the weapon catalog (stats + firing pattern + visuals)
+  for the loadout system
 - `src/waves.js` — `WaveManager`, which builds and paces enemy spawns per wave
-- `src/shop.js` — the upgrade catalog and purchase logic
+- `src/shop.js` — the stat-upgrade catalog and purchase logic
 - `src/game.js` — the main update/render loop, viewport scaling, and state
   machine (start → playing → shop → playing → ... → game over)
 
@@ -85,6 +87,11 @@ None of that is done yet; this repo is still the pure web build.
   stationary instead of animating in place
 - A denser environment: dead trees, a crypt, flickering lit braziers,
   cracked ground and moss patches alongside the tombstones
+- A weapon loadout system: the crossbow (starting weapon), a blunderbuss
+  (3-shard spread), and a chakram (slow, piercing throw) are purchasable
+  one-time unlocks in the shop's Weapons section. Switch between owned
+  weapons anytime with the HUD button next to Gold. Shop stat upgrades
+  (damage, fire rate, etc.) apply on top of whichever weapon is equipped
 
 ## Ideas for expanding
 

@@ -155,6 +155,13 @@ class Base {
   }
 }
 
+// Shared between Player.draw() and Player.getMuzzlePosition() so the visible weapon and the
+// bullet spawn point can never drift apart.
+const PLAYER_LEG_LEN_MULT = 1.15;
+const PLAYER_TORSO_LEN_MULT = 1.35;
+const PLAYER_WEAPON_PIVOT_X_MULT = 0.3;
+const PLAYER_WEAPON_PIVOT_Y_MULT = 0.22;
+
 class Player {
   constructor(x, y) {
     this.x = x;
@@ -171,9 +178,36 @@ class Player {
     this.bulletSpeed = 520;
     this.critChance = 0; // 0..1, from upgrades
 
+    // Weapon loadout
+    this.unlockedWeapons = ['crossbow'];
+    this.equippedWeapon = 'crossbow';
+
     this._fireCooldown = 0;
     this._walkPhase = 0;
     this._isMoving = false;
+  }
+
+  /** World-space position of the weapon's muzzle, matching where draw() renders it. */
+  getMuzzlePosition() {
+    const r = this.radius;
+    const facingRight = Math.cos(this.aimAngle) >= 0;
+    const shoulderY = -r * PLAYER_LEG_LEN_MULT - r * PLAYER_TORSO_LEN_MULT;
+    const pivotX = r * PLAYER_WEAPON_PIVOT_X_MULT;
+    const pivotY = shoulderY + r * PLAYER_WEAPON_PIVOT_Y_MULT;
+    const localAngle = localAngleFor(this.aimAngle, facingRight);
+    const muzzleLen = r * WEAPON_MUZZLE_LENGTH;
+    const tipLocalX = pivotX + Math.cos(localAngle) * muzzleLen;
+    const tipLocalY = pivotY + Math.sin(localAngle) * muzzleLen;
+    return {
+      x: this.x + (facingRight ? tipLocalX : -tipLocalX),
+      y: this.y + tipLocalY,
+    };
+  }
+
+  swapWeapon() {
+    if (this.unlockedWeapons.length < 2) return;
+    const idx = this.unlockedWeapons.indexOf(this.equippedWeapon);
+    this.equippedWeapon = this.unlockedWeapons[(idx + 1) % this.unlockedWeapons.length];
   }
 
   get isDead() {
@@ -203,28 +237,37 @@ class Player {
   }
 
   tryFire() {
-    if (this._fireCooldown > 0) return null;
-    this._fireCooldown = 1 / this.fireRate;
+    const weapon = WEAPON_TYPES[this.equippedWeapon];
+    if (this._fireCooldown > 0) return [];
+    this._fireCooldown = 1 / (this.fireRate * weapon.fireRateMult);
 
-    const isCrit = Math.random() < this.critChance;
-    const dmg = isCrit ? this.damage * 2 : this.damage;
-
-    return new Bullet(
-      this.x + Math.cos(this.aimAngle) * (this.radius + 6),
-      this.y + Math.sin(this.aimAngle) * (this.radius + 6),
-      this.aimAngle,
-      this.bulletSpeed,
-      dmg,
-      isCrit
-    );
+    const muzzle = this.getMuzzlePosition();
+    const pellets = weapon.pellets;
+    const bullets = [];
+    for (let i = 0; i < pellets; i++) {
+      const t = pellets === 1 ? 0 : i / (pellets - 1) - 0.5;
+      const angle = this.aimAngle + t * weapon.spreadAngle;
+      const isCrit = Math.random() < this.critChance;
+      const dmg = (isCrit ? this.damage * 2 : this.damage) * weapon.damageMult;
+      bullets.push(new Bullet(
+        muzzle.x,
+        muzzle.y,
+        angle,
+        this.bulletSpeed * weapon.bulletSpeedMult,
+        dmg,
+        isCrit,
+        weapon.pierce
+      ));
+    }
+    return bullets;
   }
 
-  draw(ctx) {
+  draw(ctx, time = 0) {
     const r = this.radius;
     const facingRight = Math.cos(this.aimAngle) >= 0;
 
-    const legLen = r * 1.15;
-    const torsoLen = r * 1.35;
+    const legLen = r * PLAYER_LEG_LEN_MULT;
+    const torsoLen = r * PLAYER_TORSO_LEN_MULT;
     const hipY = -legLen;
     const shoulderY = -legLen - torsoLen;
     const headR = r * 0.58;
@@ -299,23 +342,12 @@ class Player {
     ctx.fill();
     ctx.shadowBlur = 0;
 
-    // Crossbow arm, rotating to the true aim angle regardless of body facing.
+    // Weapon arm, rotating to the true aim angle regardless of body facing.
     ctx.save();
-    ctx.translate(r * 0.32, shoulderY + r * 0.25);
+    ctx.translate(r * PLAYER_WEAPON_PIVOT_X_MULT, shoulderY + r * PLAYER_WEAPON_PIVOT_Y_MULT);
     ctx.rotate(localAngleFor(this.aimAngle, facingRight));
-    ctx.strokeStyle = '#8a8a94';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(0, -r * 0.5);
-    ctx.lineTo(0, r * 0.5);
-    ctx.stroke();
-    ctx.strokeStyle = '#d6d6de';
-    ctx.lineWidth = 3;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.moveTo(-r * 0.1, 0);
-    ctx.lineTo(r * 1.35, 0);
-    ctx.stroke();
+    const drawWeapon = WEAPON_DRAWERS[this.equippedWeapon] || drawCrossbowWeapon;
+    drawWeapon(ctx, r, time);
     ctx.restore();
 
     ctx.restore();
@@ -323,7 +355,7 @@ class Player {
 }
 
 class Bullet {
-  constructor(x, y, angle, speed, damage, isCrit = false) {
+  constructor(x, y, angle, speed, damage, isCrit = false, pierce = 0) {
     this.x = x;
     this.y = y;
     this.vx = Math.cos(angle) * speed;
@@ -331,6 +363,9 @@ class Bullet {
     this.radius = isCrit ? 5 : 4;
     this.damage = damage;
     this.isCrit = isCrit;
+    this.pierceRemaining = pierce;
+    this.isPiercing = pierce > 0;
+    this.hitEnemies = new Set();
     this.alive = true;
   }
 
@@ -342,7 +377,28 @@ class Bullet {
     }
   }
 
-  draw(ctx) {
+  draw(ctx, time = 0) {
+    if (this.isPiercing) {
+      // Chakram: a small spinning silver ring instead of a bolt streak.
+      ctx.save();
+      ctx.fillStyle = 'rgba(0,0,0,0.3)';
+      ctx.beginPath();
+      ctx.ellipse(this.x, this.y + 3, this.radius * 0.7, 2, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.translate(this.x, this.y);
+      ctx.rotate(time * 14);
+      ctx.strokeStyle = '#cfd6dc';
+      ctx.lineWidth = 2;
+      ctx.shadowColor = '#9fd0ff';
+      ctx.shadowBlur = 5;
+      ctx.beginPath();
+      ctx.arc(0, 0, this.radius + 1, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+      ctx.restore();
+      return;
+    }
+
     const glowColor = this.isCrit ? '#ff8c3c' : '#e0c068';
     const len = this.isCrit ? 13 : 9;
     const angle = Math.atan2(this.vy, this.vx);

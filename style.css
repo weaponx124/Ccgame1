@@ -72,7 +72,7 @@ html, body {
   position: absolute;
   top: 10px;
   left: 14px;
-  z-index: 15;
+  z-index: 25;
   width: 34px;
   height: 34px;
   border-radius: 50%;
@@ -88,6 +88,27 @@ html, body {
   background: rgba(30, 22, 34, 0.9);
 }
 
+#weapon-switch-btn {
+  position: absolute;
+  top: 10px;
+  right: 14px;
+  z-index: 25;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 17px;
+  border: 1px solid var(--border-bronze);
+  background: rgba(21, 16, 26, 0.7);
+  color: var(--gold-bright);
+  font-size: 12px;
+  font-family: var(--font-display);
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+
+#weapon-switch-btn:hover {
+  background: rgba(30, 22, 34, 0.9);
+}
+
 #hud {
   position: absolute;
   top: 0;
@@ -96,7 +117,7 @@ html, body {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  padding: 10px 14px 10px 56px;
+  padding: 10px 130px 10px 56px;
   pointer-events: none;
   font-size: 14px;
   text-shadow: 0 1px 3px rgba(0,0,0,0.8);
@@ -196,6 +217,8 @@ html, body {
   padding: 30px 34px;
   width: 480px;
   max-width: 90%;
+  max-height: 500px;
+  overflow-y: auto;
   text-align: center;
   box-shadow: 0 20px 50px rgba(0,0,0,0.6), inset 0 0 40px rgba(0,0,0,0.4);
 }
@@ -226,11 +249,22 @@ html, body {
   font-style: italic;
 }
 
-#shop-items {
+#shop-items, #weapon-items {
   display: flex;
   flex-direction: column;
   gap: 10px;
   margin: 18px 0;
+}
+
+.shop-section-title {
+  font-family: var(--font-display);
+  color: var(--gold-bright);
+  font-size: 15px;
+  letter-spacing: 0.03em;
+  text-align: left;
+  margin: 20px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-bronze);
 }
 
 .shop-item {

@@ -26,6 +26,7 @@
     <canvas id="game-canvas" width="960" height="540"></canvas>
 
     <button id="pause-btn" class="hidden" aria-label="Pause menu">&#10074;&#10074;</button>
+    <button id="weapon-switch-btn" class="hidden" aria-label="Swap weapon">Crossbow</button>
 
     <div id="hud">
       <div id="hud-left">
@@ -52,6 +53,8 @@
         <h2 id="shop-title">Wave Cleared!</h2>
         <p id="shop-subtitle">Spend your gold before the next wave descends.</p>
         <div id="shop-items"></div>
+        <h3 class="shop-section-title">Weapons</h3>
+        <div id="weapon-items"></div>
         <button id="next-wave-btn">Start Next Wave &rarr;</button>
       </div>
     </div>
@@ -94,6 +97,7 @@
 
   <script src="src/vector.js"></script>
   <script src="src/input.js"></script>
+  <script src="src/weapons.js"></script>
   <script src="src/entities.js"></script>
   <script src="src/waves.js"></script>
   <script src="src/shop.js"></script>
