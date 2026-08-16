@@ -300,7 +300,7 @@ html, body {
   text-align: left;
 }
 
-#placement-cancel-btn {
+#placement-cancel-btn, #placement-rotate-btn {
   pointer-events: auto;
   flex: none;
   padding: 8px 16px;
@@ -400,6 +400,8 @@ html, body {
 
 #defense-select-actions {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 10px;
 }
 

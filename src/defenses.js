@@ -33,11 +33,12 @@ const MINE_TIERS = [
 ];
 
 class Fence {
-  constructor(x, y, tierIndex) {
+  constructor(x, y, tierIndex, rotation = 0) {
     const tier = FENCE_TIERS[tierIndex];
     this.x = x;
     this.y = y;
     this.tierIndex = tierIndex;
+    this.rotation = rotation; // radians — which way the panel faces, so walls can front any approach
     this.width = FENCE_WIDTH;
     this.radius = FENCE_WIDTH / 2;
     this.slowRadius = tier.slowRadius;
@@ -58,6 +59,7 @@ class Fence {
     const hw = this.width / 2;
     ctx.save();
     ctx.translate(this.x, this.y);
+    ctx.rotate(this.rotation);
 
     ctx.fillStyle = 'rgba(0,0,0,0.3)';
     ctx.beginPath();

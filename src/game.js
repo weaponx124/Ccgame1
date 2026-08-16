@@ -55,6 +55,7 @@
     prepCountdownText: document.getElementById('prep-countdown-text'),
     placementBar: document.getElementById('placement-bar'),
     placementPrompt: document.getElementById('placement-prompt'),
+    placementRotateBtn: document.getElementById('placement-rotate-btn'),
     placementCancelBtn: document.getElementById('placement-cancel-btn'),
     waveClearBanner: document.getElementById('wave-clear-banner'),
     waveClearSeconds: document.getElementById('wave-clear-seconds'),
@@ -65,6 +66,7 @@
     defenseSelectBar: document.getElementById('defense-select-bar'),
     defenseSelectTitle: document.getElementById('defense-select-title'),
     defenseSelectMoveBtn: document.getElementById('defense-select-move-btn'),
+    defenseSelectRotateBtn: document.getElementById('defense-select-rotate-btn'),
     defenseSelectUpgradeBtn: document.getElementById('defense-select-upgrade-btn'),
     defenseSelectCloseBtn: document.getElementById('defense-select-close-btn'),
   };
@@ -225,20 +227,28 @@
   }
 
   // ---------- Manual defense placement ----------
+  const ROTATE_STEP = Math.PI / 4; // 45° per tap — enough steps to front any approach direction
+
   function beginPlacement(kind, tierIndex, moving = null) {
-    placementMode = { kind, tierIndex, moving };
+    placementMode = { kind, tierIndex, moving, rotation: moving ? moving.rotation : 0 };
     placementCursor = null;
     el.shopOverlay.classList.add('hidden');
     el.reopenShopBtn.classList.add('hidden');
     el.fieldPrepPill.classList.add('hidden');
     hideDefenseSelection();
     el.placementBar.classList.remove('hidden');
+    el.placementRotateBtn.classList.toggle('hidden', kind !== 'fence');
     const tiers = kind === 'fence' ? FENCE_TIERS : MINE_TIERS;
     el.placementPrompt.textContent = moving
       ? `Tap the battlefield to move your ${tiers[tierIndex].name}.`
       : `Tap the battlefield to place your ${tiers[tierIndex].name}. It's already paid for.`;
     input.setSuspended(true);
   }
+
+  el.placementRotateBtn.addEventListener('click', () => {
+    if (!placementMode || placementMode.kind !== 'fence') return;
+    placementMode.rotation = (placementMode.rotation + ROTATE_STEP) % (Math.PI * 2);
+  });
 
   function endPlacement() {
     placementMode = null;
@@ -295,12 +305,13 @@
       invalidPlacementFlash = 0.3;
       return;
     }
-    const { kind, tierIndex, moving } = placementMode;
+    const { kind, tierIndex, moving, rotation } = placementMode;
     if (moving) {
       moving.x = p.x;
       moving.y = p.y;
+      if (kind === 'fence') moving.rotation = rotation;
     } else if (kind === 'fence') {
-      fences.push(new Fence(p.x, p.y, tierIndex));
+      fences.push(new Fence(p.x, p.y, tierIndex, rotation));
       defenseState.fencesPlaced += 1;
     } else {
       mines.push(new Mine(p.x, p.y, tierIndex));
@@ -319,6 +330,7 @@
     const tiers = kind === 'fence' ? FENCE_TIERS : MINE_TIERS;
     const tier = tiers[ref.tierIndex];
     el.defenseSelectTitle.textContent = `${tier.name} selected`;
+    el.defenseSelectRotateBtn.classList.toggle('hidden', kind !== 'fence');
     const unlockedTierIndex = defenseState[kind === 'fence' ? 'fenceTier' : 'mineTier'];
     const canUpgrade = unlockedTierIndex > ref.tierIndex;
     el.defenseSelectUpgradeBtn.classList.toggle('hidden', !canUpgrade);
@@ -349,6 +361,12 @@
     if (!selectedDefense) return;
     const { kind, ref } = selectedDefense;
     beginPlacement(kind, ref.tierIndex, ref);
+  });
+
+  el.defenseSelectRotateBtn.addEventListener('click', () => {
+    if (!selectedDefense || selectedDefense.kind !== 'fence') return;
+    const { ref } = selectedDefense;
+    ref.rotation = (ref.rotation + ROTATE_STEP) % (Math.PI * 2);
   });
 
   el.defenseSelectUpgradeBtn.addEventListener('click', () => {
@@ -559,7 +577,7 @@
       base: { health: base.health, maxHealth: base.maxHealth },
       enemies: enemies.map((e) => ({ typeKey: e.typeKey, x: e.x, y: e.y, health: e.health, maxHealth: e.maxHealth })),
       shopPurchaseCounts: { ...shop.purchaseCounts },
-      fences: fences.map((f) => ({ x: f.x, y: f.y, health: f.health, maxHealth: f.maxHealth, tierIndex: f.tierIndex })),
+      fences: fences.map((f) => ({ x: f.x, y: f.y, health: f.health, maxHealth: f.maxHealth, tierIndex: f.tierIndex, rotation: f.rotation })),
       mines: mines.map((m) => ({ x: m.x, y: m.y, damage: m.damage, blastRadius: m.blastRadius, tierIndex: m.tierIndex })),
       defenseState: { ...defenseState },
       waveClearTimer,
@@ -607,7 +625,7 @@
     explosions = [];
     hitEffects = [];
     fences = (snapshot.fences || []).map((f) => {
-      const fence = new Fence(f.x, f.y, f.tierIndex || 0);
+      const fence = new Fence(f.x, f.y, f.tierIndex || 0, f.rotation || 0);
       fence.maxHealth = f.maxHealth;
       fence.health = f.health;
       return fence;
@@ -1165,9 +1183,10 @@
     const previewRadius = placementMode.kind === 'fence'
       ? tiers[placementMode.tierIndex].slowRadius
       : tiers[placementMode.tierIndex].blastRadius;
+    const glow = valid ? 'rgba(120, 220, 140,' : 'rgba(220, 70, 70,';
     ctx.save();
-    ctx.strokeStyle = valid ? 'rgba(120, 220, 140, 0.85)' : 'rgba(220, 70, 70, 0.85)';
-    ctx.fillStyle = valid ? 'rgba(120, 220, 140, 0.15)' : 'rgba(220, 70, 70, 0.15)';
+    ctx.strokeStyle = `${glow} 0.85)`;
+    ctx.fillStyle = `${glow} 0.15)`;
     ctx.lineWidth = 2;
     ctx.setLineDash([5, 4]);
     ctx.beginPath();
@@ -1175,9 +1194,26 @@
     ctx.fill();
     ctx.stroke();
     ctx.setLineDash([]);
+
+    if (placementMode.kind === 'fence') {
+      // Shows which way the panel will face, so a wall can be lined up before it's committed.
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(placementMode.rotation);
+      ctx.strokeStyle = `${glow} 0.95)`;
+      ctx.lineWidth = 4;
+      ctx.lineCap = 'round';
+      const hw = FENCE_WIDTH / 2;
+      ctx.beginPath();
+      ctx.moveTo(-hw, 0);
+      ctx.lineTo(hw, 0);
+      ctx.stroke();
+      ctx.restore();
+    }
+
     ctx.beginPath();
     ctx.arc(x, y, 5, 0, Math.PI * 2);
-    ctx.fillStyle = valid ? 'rgba(120, 220, 140, 0.9)' : 'rgba(220, 70, 70, 0.9)';
+    ctx.fillStyle = `${glow} 0.9)`;
     ctx.fill();
     ctx.restore();
   }
@@ -1300,14 +1336,14 @@
         muzzle: player.getMuzzlePosition(),
       },
       base: { x: base.x, y: base.y, health: base.health },
-      fences: fences.map((f) => ({ x: f.x, y: f.y, health: f.health, maxHealth: f.maxHealth, tierIndex: f.tierIndex })),
+      fences: fences.map((f) => ({ x: f.x, y: f.y, health: f.health, maxHealth: f.maxHealth, tierIndex: f.tierIndex, rotation: f.rotation })),
       mines: mines.map((m) => ({ x: m.x, y: m.y, damage: m.damage, blastRadius: m.blastRadius, tierIndex: m.tierIndex })),
       defenseState: { ...defenseState },
-      placementMode: placementMode ? { kind: placementMode.kind, tierIndex: placementMode.tierIndex, moving: !!placementMode.moving } : null,
+      placementMode: placementMode ? { kind: placementMode.kind, tierIndex: placementMode.tierIndex, moving: !!placementMode.moving, rotation: placementMode.rotation } : null,
       prepCountdown,
       shopHidden,
       waveClearTimer,
-      selectedDefense: selectedDefense ? { kind: selectedDefense.kind, x: selectedDefense.ref.x, y: selectedDefense.ref.y, tierIndex: selectedDefense.ref.tierIndex } : null,
+      selectedDefense: selectedDefense ? { kind: selectedDefense.kind, x: selectedDefense.ref.x, y: selectedDefense.ref.y, tierIndex: selectedDefense.ref.tierIndex, rotation: selectedDefense.ref.rotation } : null,
       moveStick: { active: input.moveStick.active, ...input.moveStick.read() },
       aimStick: { active: input.aimStick.active, ...input.aimStick.read() },
     }),
@@ -1320,5 +1356,7 @@
     debugSelectFieldTap: (x, y) => handleFieldTap(x, y),
     debugMoveSelected: () => el.defenseSelectMoveBtn.click(),
     debugUpgradeSelected: () => el.defenseSelectUpgradeBtn.click(),
+    debugRotateSelected: () => el.defenseSelectRotateBtn.click(),
+    debugRotatePlacement: () => el.placementRotateBtn.click(),
   };
 })();

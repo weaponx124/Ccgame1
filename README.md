@@ -113,13 +113,18 @@ None of that is done yet; this repo is still the pure web build.
   become the obvious weak point once you can afford better
 - Fences are two units wide, and any two placed within range of each
   other automatically link with a connecting rail, so a row of them
-  reads as one continuous wall instead of separate posts
+  reads as one continuous wall instead of separate posts. Fences can
+  also be rotated (a Rotate button while placing, moving, or from a
+  placed fence's selection bar; 45° per tap) so a wall can be built to
+  face any approach — a horizontal panel only fronts enemies coming from
+  north/south, so rotate it 90° to build a wall facing east/west
 - "View Field": closing the shop panel during prep (via the View Field
   button, or the floating Open Shop button to bring it back) reveals the
   battlefield underneath so you can plan around what's already down. With
   the panel closed, tapping a placed fence or mine selects it, opening a
-  small action bar to Move it (drag it to a new spot for free) or, once
-  you've researched a higher tier, Upgrade it in place for that tier's
+  small action bar to Move it (drag it to a new spot for free), Rotate it
+  (fences only), or, once you've researched a higher tier, Upgrade it in
+  place for that tier's
   placement cost
 - Capped shop upgrades (bolt damage, fire rate, move speed, max HP, crit
   chance) show a row of pips under their description — filled pips are
