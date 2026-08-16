@@ -52,6 +52,10 @@
       <div id="shop-panel">
         <h2 id="shop-title">Wave Cleared!</h2>
         <p id="shop-subtitle">Spend your gold before the next wave descends.</p>
+        <div id="prep-countdown">
+          <div class="bar" id="prep-countdown-bar"><div class="bar-fill" id="prep-countdown-fill"></div></div>
+          <span id="prep-countdown-text">25s</span>
+        </div>
         <div id="shop-items"></div>
         <h3 class="shop-section-title">Weapons</h3>
         <div id="weapon-items"></div>
@@ -59,6 +63,11 @@
         <div id="defense-items"></div>
         <button id="next-wave-btn">Start Next Wave &rarr;</button>
       </div>
+    </div>
+
+    <div id="placement-bar" class="hidden">
+      <p id="placement-prompt">Tap the battlefield to place your defense.</p>
+      <button id="placement-cancel-btn" class="btn-secondary">Cancel</button>
     </div>
 
     <div id="gameover-overlay" class="hidden">
@@ -101,6 +110,7 @@
   <script src="src/input.js"></script>
   <script src="src/weapons.js"></script>
   <script src="src/defenses.js"></script>
+  <script src="src/effects.js"></script>
   <script src="src/entities.js"></script>
   <script src="src/waves.js"></script>
   <script src="src/shop.js"></script>

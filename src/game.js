@@ -51,6 +51,11 @@
     resumeBtn: document.getElementById('resume-btn'),
     saveQuitBtn: document.getElementById('save-quit-btn'),
     weaponSwitchBtn: document.getElementById('weapon-switch-btn'),
+    prepCountdownFill: document.getElementById('prep-countdown-fill'),
+    prepCountdownText: document.getElementById('prep-countdown-text'),
+    placementBar: document.getElementById('placement-bar'),
+    placementPrompt: document.getElementById('placement-prompt'),
+    placementCancelBtn: document.getElementById('placement-cancel-btn'),
   };
 
   // ---------- Game state ----------
@@ -58,8 +63,13 @@
   let paused = false;
   let player, base, waveManager, shop;
   let bullets, enemies;
-  let fences, mines, explosions;
-  let defensePurchaseCounts;
+  let fences, mines, explosions, hitEffects;
+  let defenseState; // { fenceTier, mineTier, fencesPlaced, minesPlaced }
+  let placementMode; // null | { kind: 'fence'|'mine', tierIndex, cost }
+  let placementCursor; // { x, y } | null — last known pointer position while placing
+  let invalidPlacementFlash; // seconds remaining on the "can't place here" marker
+  let prepCountdown; // seconds remaining in the current shop/prep phase
+  let damageFlash; // 0..1, screen-tint intensity that decays after the player/base is hit
   let gold;
 
   function setPauseButtonVisible(visible) {
@@ -77,7 +87,12 @@
     fences = [];
     mines = [];
     explosions = [];
-    defensePurchaseCounts = { fence: 0, mine: 0 };
+    hitEffects = [];
+    defenseState = { fenceTier: 0, mineTier: 0, fencesPlaced: 0, minesPlaced: 0 };
+    placementMode = null;
+    placementCursor = null;
+    invalidPlacementFlash = 0;
+    damageFlash = 0;
     gold = 20; // enough for one small early purchase (a fence, a mine, or a cheap upgrade)
     state = 'shop';
     waveManager.waveNumber = 0; // startNextWave will bump to 1
@@ -85,48 +100,60 @@
   }
 
   // ---------- Shop UI ----------
+  const PREP_TIME_FIRST = 35;
+  const PREP_TIME = 25;
+
   function openShop(isFirst = false) {
     state = 'shop';
+    prepCountdown = isFirst ? PREP_TIME_FIRST : PREP_TIME;
     el.shopTitle.textContent = isFirst ? 'Prepare for the Hunt' : `Wave ${waveManager.waveNumber} Survived`;
     renderShopItems();
     renderWeaponItems();
     renderDefenseItems();
+    updatePrepCountdownUI();
     el.shopOverlay.classList.remove('hidden');
     setPauseButtonVisible(true);
   }
 
+  function updatePrepCountdownUI() {
+    const max = waveManager.waveNumber === 0 ? PREP_TIME_FIRST : PREP_TIME;
+    const pct = clamp(prepCountdown / max, 0, 1) * 100;
+    el.prepCountdownFill.style.width = pct + '%';
+    el.prepCountdownText.textContent = Math.ceil(prepCountdown) + 's';
+  }
+
   function renderDefenseItems() {
     el.defenseItems.innerHTML = '';
+    renderDefenseTierSection('fence', FENCE_TIERS, 'fenceTier', 'fencesPlaced', FENCE_MAX,
+      (t) => `Slows enemies nearby; ${t.maxHealth} HP.`);
+    renderDefenseTierSection('mine', MINE_TIERS, 'mineTier', 'minesPlaced', MINE_MAX,
+      (t) => `${t.damage} dmg in a ${t.blastRadius}px blast.`);
+  }
 
-    const fenceCount = defensePurchaseCounts.fence;
-    const fenceMaxed = fenceCount >= FENCE_MAX;
-    const fenceCost = costFor(FENCE_BASE_COST, FENCE_COST_GROWTH, fenceCount);
+  function renderDefenseTierSection(kind, tiers, tierKey, placedKey, maxTotal, describe) {
+    const tierIndex = defenseState[tierKey];
+    const tier = tiers[tierIndex];
+    const placed = defenseState[placedKey];
+    const placedMaxed = placed >= maxTotal;
+
     appendDefenseRow({
-      name: 'Wooden Fence',
-      desc: `Slows enemies that pass near it. ${fenceCount}/${FENCE_MAX} placed around the ward.`,
-      maxed: fenceMaxed,
-      cost: fenceCost,
-      onBuy: () => {
-        const pos = nextFencePosition(base, fenceCount);
-        fences.push(new Fence(pos.x, pos.y, fenceCount));
-        defensePurchaseCounts.fence += 1;
-      },
+      name: `${tier.name} — Lv ${tierIndex + 1}/${tiers.length}`,
+      desc: `${describe(tier)} ${placed}/${maxTotal} placed.`,
+      maxed: placedMaxed,
+      cost: tier.cost,
+      onBuy: () => beginPlacement(kind, tierIndex),
     });
 
-    const mineCount = defensePurchaseCounts.mine;
-    const mineMaxed = mineCount >= MINE_MAX;
-    const mineCost = costFor(MINE_BASE_COST, MINE_COST_GROWTH, mineCount);
-    appendDefenseRow({
-      name: 'Buried Mine',
-      desc: `Explodes when a monster steps near. ${mineCount}/${MINE_MAX} buried in the field.`,
-      maxed: mineMaxed,
-      cost: mineCost,
-      onBuy: () => {
-        const pos = randomMinePosition(base, bounds, mines);
-        mines.push(new Mine(pos.x, pos.y, mineCount));
-        defensePurchaseCounts.mine += 1;
-      },
-    });
+    if (tierIndex < tiers.length - 1) {
+      const nextTier = tiers[tierIndex + 1];
+      appendDefenseRow({
+        name: `Upgrade to ${nextTier.name}`,
+        desc: `${describe(nextTier)} Only affects defenses placed after upgrading.`,
+        maxed: false,
+        cost: nextTier.unlockCost,
+        onBuy: () => { defenseState[tierKey] += 1; },
+      });
+    }
   }
 
   function appendDefenseRow({ name, desc, maxed, cost, onBuy }) {
@@ -152,6 +179,76 @@
     });
     el.defenseItems.appendChild(row);
   }
+
+  // ---------- Manual defense placement ----------
+  function beginPlacement(kind, tierIndex) {
+    placementMode = { kind, tierIndex };
+    placementCursor = null;
+    el.shopOverlay.classList.add('hidden');
+    el.placementBar.classList.remove('hidden');
+    const tiers = kind === 'fence' ? FENCE_TIERS : MINE_TIERS;
+    el.placementPrompt.textContent = `Tap the battlefield to place your ${tiers[tierIndex].name}. It's already paid for.`;
+    input.setSuspended(true);
+  }
+
+  function endPlacement() {
+    placementMode = null;
+    placementCursor = null;
+    el.placementBar.classList.add('hidden');
+    input.setSuspended(false);
+    el.shopOverlay.classList.remove('hidden');
+  }
+
+  el.placementCancelBtn.addEventListener('click', () => {
+    if (!placementMode) return;
+    const tiers = placementMode.kind === 'fence' ? FENCE_TIERS : MINE_TIERS;
+    gold += tiers[placementMode.tierIndex].cost; // refund — it was paid up front
+    endPlacement();
+    updateHud();
+    renderDefenseItems();
+  });
+
+  function isValidPlacement(x, y) {
+    if (x < 26 || x > bounds.width - 26 || y < 26 || y > bounds.height - 26) return false;
+    if (dist(x, y, base.x, base.y) < base.radius + 22) return false;
+    for (const f of fences) if (dist(x, y, f.x, f.y) < 24) return false;
+    for (const m of mines) if (dist(x, y, m.x, m.y) < 24) return false;
+    return true;
+  }
+
+  function handlePlacementTap(clientX, clientY) {
+    if (!placementMode) return;
+    const p = input.toCanvasSpace(clientX, clientY);
+    placeAt(p.x, p.y);
+  }
+
+  /** Places (or flashes invalid at) canvas-space coordinates — shared by the real tap handler and debug hooks. */
+  function placeAt(x, y) {
+    if (!placementMode) return;
+    const p = { x, y };
+    placementCursor = p;
+    if (!isValidPlacement(p.x, p.y)) {
+      invalidPlacementFlash = 0.3;
+      return;
+    }
+    const { kind, tierIndex } = placementMode;
+    if (kind === 'fence') {
+      fences.push(new Fence(p.x, p.y, tierIndex));
+      defenseState.fencesPlaced += 1;
+    } else {
+      mines.push(new Mine(p.x, p.y, tierIndex));
+      defenseState.minesPlaced += 1;
+    }
+    endPlacement();
+    updateHud();
+    renderDefenseItems();
+  }
+
+  canvas.addEventListener('pointerdown', (e) => handlePlacementTap(e.clientX, e.clientY));
+  canvas.addEventListener('pointermove', (e) => {
+    if (!placementMode) return;
+    placementCursor = input.toCanvasSpace(e.clientX, e.clientY);
+  });
 
   function renderWeaponItems() {
     el.weaponItems.innerHTML = '';
@@ -220,12 +317,14 @@
     }
   }
 
-  el.nextWaveBtn.addEventListener('click', () => {
+  function startNextWave() {
     el.shopOverlay.classList.add('hidden');
     state = 'playing';
     waveManager.startNextWave();
     updateHud();
-  });
+  }
+
+  el.nextWaveBtn.addEventListener('click', startNextWave);
 
   el.restartBtn.addEventListener('click', () => {
     el.gameoverOverlay.classList.add('hidden');
@@ -308,9 +407,9 @@
       base: { health: base.health, maxHealth: base.maxHealth },
       enemies: enemies.map((e) => ({ typeKey: e.typeKey, x: e.x, y: e.y, health: e.health, maxHealth: e.maxHealth })),
       shopPurchaseCounts: { ...shop.purchaseCounts },
-      fences: fences.map((f) => ({ x: f.x, y: f.y, health: f.health, maxHealth: f.maxHealth })),
-      mines: mines.map((m) => ({ x: m.x, y: m.y, damage: m.damage, blastRadius: m.blastRadius })),
-      defensePurchaseCounts: { ...defensePurchaseCounts },
+      fences: fences.map((f) => ({ x: f.x, y: f.y, health: f.health, maxHealth: f.maxHealth, tierIndex: f.tierIndex })),
+      mines: mines.map((m) => ({ x: m.x, y: m.y, damage: m.damage, blastRadius: m.blastRadius, tierIndex: m.tierIndex })),
+      defenseState: { ...defenseState },
     };
   }
 
@@ -353,21 +452,26 @@
     });
 
     explosions = [];
+    hitEffects = [];
     fences = (snapshot.fences || []).map((f) => {
-      const fence = new Fence(f.x, f.y, 0);
+      const fence = new Fence(f.x, f.y, f.tierIndex || 0);
       fence.maxHealth = f.maxHealth;
       fence.health = f.health;
       return fence;
     });
     mines = (snapshot.mines || []).map((m) => {
-      const mine = new Mine(m.x, m.y, 0);
+      const mine = new Mine(m.x, m.y, m.tierIndex || 0);
       mine.damage = m.damage;
       mine.blastRadius = m.blastRadius;
       return mine;
     });
-    defensePurchaseCounts = snapshot.defensePurchaseCounts
-      ? { ...snapshot.defensePurchaseCounts }
-      : { fence: 0, mine: 0 };
+    defenseState = snapshot.defenseState
+      ? { ...snapshot.defenseState }
+      : { fenceTier: 0, mineTier: 0, fencesPlaced: fences.length, minesPlaced: mines.length };
+    placementMode = null;
+    placementCursor = null;
+    invalidPlacementFlash = 0;
+    damageFlash = 0;
 
     gold = snapshot.gold;
     paused = false;
@@ -405,6 +509,21 @@
 
   // ---------- Update ----------
   function update(dt) {
+    if (invalidPlacementFlash > 0) invalidPlacementFlash = Math.max(0, invalidPlacementFlash - dt);
+    if (damageFlash > 0) damageFlash = Math.max(0, damageFlash - dt * 2.5);
+    for (const fx of hitEffects) fx.update(dt);
+    hitEffects = hitEffects.filter((f) => f.alive);
+
+    if (state === 'shop') {
+      // The clock only runs while no placement UI is open, so placing defenses is never rushed.
+      if (!placementMode) {
+        prepCountdown -= dt;
+        updatePrepCountdownUI();
+        if (prepCountdown <= 0) startNextWave();
+      }
+      return;
+    }
+
     if (state !== 'playing') return;
 
     const control = input.getControlState(player.x, player.y, player.aimAngle);
@@ -441,9 +560,11 @@
       if (dist(enemy.x, enemy.y, base.x, base.y) <= base.radius + enemy.radius) {
         base.takeDamage(enemy.damage);
         enemy.alive = false;
+        damageFlash = Math.min(1, damageFlash + 0.35);
       } else if (dist(enemy.x, enemy.y, player.x, player.y) <= player.radius + enemy.radius) {
         player.takeDamage(enemy.damage);
         enemy.alive = false;
+        damageFlash = Math.min(1, damageFlash + 0.5);
       }
     }
     fences = fences.filter((f) => f.alive);
@@ -484,6 +605,9 @@
         if (dist(bullet.x, bullet.y, hitCenter.x, hitCenter.y) <= bullet.radius + enemy.hitRadius) {
           enemy.takeDamage(bullet.damage);
           bullet.hitEnemies.add(enemy);
+          const hitAngle = Math.atan2(bullet.vy, bullet.vx);
+          hitEffects.push(new HitSpark(hitCenter.x, hitCenter.y, hitAngle, bullet.isCrit));
+          hitEffects.push(new DamageNumber(hitCenter.x, hitCenter.y, bullet.damage, bullet.isCrit));
           if (!enemy.alive) gold += enemy.reward;
           if (bullet.pierceRemaining > 0) {
             bullet.pierceRemaining -= 1;
@@ -855,6 +979,59 @@
     ctx.restore();
   }
 
+  function drawPlacementPreview() {
+    if (!placementMode || !placementCursor) return;
+    const { x, y } = placementCursor;
+    const valid = isValidPlacement(x, y);
+    const tiers = placementMode.kind === 'fence' ? FENCE_TIERS : MINE_TIERS;
+    const previewRadius = placementMode.kind === 'fence'
+      ? tiers[placementMode.tierIndex].slowRadius
+      : tiers[placementMode.tierIndex].blastRadius;
+    ctx.save();
+    ctx.strokeStyle = valid ? 'rgba(120, 220, 140, 0.85)' : 'rgba(220, 70, 70, 0.85)';
+    ctx.fillStyle = valid ? 'rgba(120, 220, 140, 0.15)' : 'rgba(220, 70, 70, 0.15)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([5, 4]);
+    ctx.beginPath();
+    ctx.arc(x, y, previewRadius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.arc(x, y, 5, 0, Math.PI * 2);
+    ctx.fillStyle = valid ? 'rgba(120, 220, 140, 0.9)' : 'rgba(220, 70, 70, 0.9)';
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawInvalidPlacementFlash() {
+    if (invalidPlacementFlash <= 0 || !placementCursor) return;
+    const t = invalidPlacementFlash / 0.3;
+    ctx.save();
+    ctx.globalAlpha = t;
+    ctx.strokeStyle = 'rgba(255, 60, 60, 0.9)';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.arc(placementCursor.x, placementCursor.y, 18 * (1.4 - t), 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawDamageFlash() {
+    if (damageFlash <= 0) return;
+    ctx.save();
+    ctx.globalAlpha = damageFlash * 0.45;
+    const grad = ctx.createRadialGradient(
+      bounds.width / 2, bounds.height / 2, bounds.height * 0.15,
+      bounds.width / 2, bounds.height / 2, bounds.height * 0.75
+    );
+    grad.addColorStop(0, 'rgba(180, 10, 20, 0)');
+    grad.addColorStop(1, 'rgba(180, 10, 20, 0.9)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, bounds.width, bounds.height);
+    ctx.restore();
+  }
+
   function render(dt) {
     drawArenaBackground(elapsed);
     for (const mine of mines) mine.draw(ctx, elapsed);
@@ -864,6 +1041,9 @@
     for (const bullet of bullets) bullet.draw(ctx, elapsed);
     if (state !== 'gameover') player.draw(ctx, elapsed);
     for (const ex of explosions) ex.draw(ctx);
+    for (const fx of hitEffects) fx.draw(ctx);
+    drawPlacementPreview();
+    drawInvalidPlacementFlash();
 
     if (state === 'playing') {
       drawStick(input.moveStick, 'rgba(79, 220, 111, 0.9)');
@@ -871,6 +1051,7 @@
     }
 
     drawFog(dt);
+    drawDamageFlash();
     drawVignette();
   }
 
@@ -920,11 +1101,16 @@
         muzzle: player.getMuzzlePosition(),
       },
       base: { x: base.x, y: base.y, health: base.health },
-      fences: fences.map((f) => ({ x: f.x, y: f.y, health: f.health, maxHealth: f.maxHealth })),
-      mines: mines.map((m) => ({ x: m.x, y: m.y, damage: m.damage, blastRadius: m.blastRadius })),
-      defensePurchaseCounts: { ...defensePurchaseCounts },
+      fences: fences.map((f) => ({ x: f.x, y: f.y, health: f.health, maxHealth: f.maxHealth, tierIndex: f.tierIndex })),
+      mines: mines.map((m) => ({ x: m.x, y: m.y, damage: m.damage, blastRadius: m.blastRadius, tierIndex: m.tierIndex })),
+      defenseState: { ...defenseState },
+      placementMode: placementMode ? { ...placementMode } : null,
+      prepCountdown,
       moveStick: { active: input.moveStick.active, ...input.moveStick.read() },
       aimStick: { active: input.aimStick.active, ...input.aimStick.read() },
     }),
+    debugBeginPlacement: (kind, tierIndex) => beginPlacement(kind, tierIndex),
+    debugPlaceAt: (x, y) => placeAt(x, y),
+    debugSetPrepCountdown: (s) => { prepCountdown = s; },
   };
 })();

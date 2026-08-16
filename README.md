@@ -45,8 +45,11 @@ Desktop fallback (used automatically until the page detects a touch):
 - `src/entities.js` — `Player`, `Base`, `Bullet`, `Enemy` classes
 - `src/weapons.js` — the weapon catalog (stats + firing pattern + visuals)
   for the loadout system
-- `src/defenses.js` — `Fence`, `Mine`, `Explosion` classes and the
-  auto-placement logic for the base-defense shop section
+- `src/defenses.js` — `Fence`, `Mine`, `Explosion` classes and the tiered
+  stat catalog (`FENCE_TIERS`, `MINE_TIERS`) for the manually-placed
+  base-defense shop section
+- `src/effects.js` — `HitSpark` and `DamageNumber`, the cosmetic feedback
+  spawned when a bullet lands
 - `src/waves.js` — `WaveManager`, which builds and paces enemy spawns per wave
 - `src/shop.js` — the stat-upgrade catalog and purchase logic
 - `src/game.js` — the main update/render loop, viewport scaling, and state
@@ -96,13 +99,27 @@ None of that is done yet; this repo is still the pure web build.
   (damage, fire rate, etc.) apply on top of whichever weapon is equipped
 - A base-defense economy: you start with a small amount of gold (enough
   for one early fence, mine, or cheap upgrade), earn more per kill, and
-  now also get a wave-clear bonus. The shop's Defenses section sells
-  Wooden Fences (auto-placed one at a time into a ring around the ward;
-  slow any enemy that passes near, and take contact damage until they
-  break) and Buried Mines (auto-scattered in the approach field;
-  one-shot AoE that detonates on the first enemy to step near). Both
-  get a little stronger each time you buy another, so early investment
-  keeps paying off as the perimeter grows
+  also get a wave-clear bonus. The shop's Defenses section sells Fences
+  (slow any enemy that passes near, and take contact damage until they
+  break) and Mines (one-shot AoE that detonates on the first enemy to
+  step near) — buying one arms a placement cursor, and the next tap on
+  the battlefield drops it exactly where you choose (or Cancel refunds
+  it). Each defense has a three-tier ladder (Wooden Fence → Iron
+  Palisade → Runic Barrier; Buried Mine → Arcane Charge → Hellfire Trap).
+  Researching the next tier is a one-time purchase that only affects
+  defenses placed afterward — existing placements keep their original
+  stats, so early cheap defenses aren't destroyed, but they do become
+  the obvious weak point once you can afford better
+- A short prep countdown (35s on the first wave, 25s after) ticks down
+  in the shop between waves, pushing you to make upgrade decisions
+  quickly; the clock pauses automatically while a placement cursor is
+  active, so lining up exactly where a fence or mine goes is never
+  rushed. The countdown hitting zero starts the next wave automatically
+- Hit feedback: landing a shot spawns a quick spark burst and a floating
+  damage number (crits are bigger and orange); mine/charge detonations
+  get an expanding shockwave ring, a core flash, and scattering embers
+  instead of just vanishing; taking damage on the player or the ward
+  flashes a brief red screen tint so a hit always reads as a hit
 
 ## Ideas for expanding
 

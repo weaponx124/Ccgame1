@@ -249,6 +249,64 @@ html, body {
   font-style: italic;
 }
 
+#prep-countdown {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 0 2px;
+}
+
+#prep-countdown-bar {
+  width: 100%;
+  height: 8px;
+}
+
+#prep-countdown-bar .bar-fill {
+  background: linear-gradient(90deg, var(--gold), var(--gold-bright));
+  transition: width 0.2s linear;
+}
+
+#prep-countdown-text {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--gold-bright);
+  min-width: 30px;
+  text-align: right;
+}
+
+#placement-bar {
+  position: absolute;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  z-index: 22;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: rgba(10, 7, 12, 0.88);
+  border: 1px solid var(--border-bronze);
+  border-radius: 4px;
+  padding: 10px 18px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+  pointer-events: none;
+}
+
+#placement-prompt {
+  margin: 0;
+  font-size: 13px;
+  color: var(--bone);
+  max-width: 320px;
+  text-align: left;
+}
+
+#placement-cancel-btn {
+  pointer-events: auto;
+  flex: none;
+  padding: 8px 16px;
+  font-size: 13px;
+}
+
 #shop-items, #weapon-items {
   display: flex;
   flex-direction: column;

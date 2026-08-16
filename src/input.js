@@ -76,6 +76,7 @@ class InputManager {
     this.mouseY = bounds.height / 2;
     this.mouseDown = false;
     this.hasTouched = false; // once true, prefer touch controls over mouse hints
+    this.suspended = false; // true while a non-gameplay UI (e.g. defense placement) owns taps
 
     this.moveStick = new Joystick((x) => x < bounds.width / 2);
     this.aimStick = new Joystick((x) => x >= bounds.width / 2);
@@ -97,7 +98,7 @@ class InputManager {
     canvas.addEventListener('touchcancel', (e) => this._onTouchEnd(e), { passive: false });
   }
 
-  _toCanvasSpace(clientX, clientY) {
+  toCanvasSpace(clientX, clientY) {
     const rect = this.canvas.getBoundingClientRect();
     return {
       x: (clientX - rect.left) * (this.bounds.width / rect.width),
@@ -105,7 +106,12 @@ class InputManager {
     };
   }
 
+  _toCanvasSpace(clientX, clientY) {
+    return this.toCanvasSpace(clientX, clientY);
+  }
+
   _onTouchStart(e) {
+    if (this.suspended) return;
     e.preventDefault();
     this.hasTouched = true;
     for (const t of e.changedTouches) {
@@ -117,6 +123,7 @@ class InputManager {
   }
 
   _onTouchMove(e) {
+    if (this.suspended) return;
     e.preventDefault();
     for (const t of e.changedTouches) {
       const p = this._toCanvasSpace(t.clientX, t.clientY);
@@ -126,10 +133,20 @@ class InputManager {
   }
 
   _onTouchEnd(e) {
+    if (this.suspended) return;
     e.preventDefault();
     for (const t of e.changedTouches) {
       this.moveStick.release(t.identifier);
       this.aimStick.release(t.identifier);
+    }
+  }
+
+  /** Releases any claimed sticks and stops responding to touch — used while a placement UI owns taps. */
+  setSuspended(v) {
+    this.suspended = v;
+    if (v) {
+      this.moveStick.active = false;
+      this.aimStick.active = false;
     }
   }
 
