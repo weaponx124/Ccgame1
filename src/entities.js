@@ -67,19 +67,12 @@ class Player {
     this.health = clamp(this.health + amount, 0, this.maxHealth);
   }
 
-  update(dt, input, bounds) {
-    let dx = 0;
-    let dy = 0;
-    if (input.isDown('KeyW') || input.isDown('ArrowUp')) dy -= 1;
-    if (input.isDown('KeyS') || input.isDown('ArrowDown')) dy += 1;
-    if (input.isDown('KeyA') || input.isDown('ArrowLeft')) dx -= 1;
-    if (input.isDown('KeyD') || input.isDown('ArrowRight')) dx += 1;
+  /** control: { moveX, moveY, moveMag, aimAngle, firing } from InputManager.getControlState(). */
+  update(dt, control, bounds) {
+    this.x = clamp(this.x + control.moveX * control.moveMag * this.speed * dt, this.radius, bounds.width - this.radius);
+    this.y = clamp(this.y + control.moveY * control.moveMag * this.speed * dt, this.radius, bounds.height - this.radius);
 
-    const dir = normalize(dx, dy);
-    this.x = clamp(this.x + dir.x * this.speed * dt, this.radius, bounds.width - this.radius);
-    this.y = clamp(this.y + dir.y * this.speed * dt, this.radius, bounds.height - this.radius);
-
-    this.aimAngle = Math.atan2(input.mouseY - this.y, input.mouseX - this.x);
+    this.aimAngle = control.aimAngle;
 
     if (this._fireCooldown > 0) this._fireCooldown -= dt;
   }

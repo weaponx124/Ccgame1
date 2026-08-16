@@ -4,24 +4,19 @@
   const canvas = document.getElementById('game-canvas');
   const ctx = canvas.getContext('2d');
   const bounds = { width: canvas.width, height: canvas.height };
+  const input = new InputManager(canvas, bounds);
 
-  // ---------- Input ----------
-  const input = {
-    keys: new Set(),
-    mouseX: bounds.width / 2,
-    mouseY: bounds.height / 2,
-    mouseDown: false,
-    isDown(code) { return this.keys.has(code); },
-  };
-  window.addEventListener('keydown', (e) => input.keys.add(e.code));
-  window.addEventListener('keyup', (e) => input.keys.delete(e.code));
-  canvas.addEventListener('mousemove', (e) => {
-    const rect = canvas.getBoundingClientRect();
-    input.mouseX = (e.clientX - rect.left) * (canvas.width / rect.width);
-    input.mouseY = (e.clientY - rect.top) * (canvas.height / rect.height);
-  });
-  canvas.addEventListener('mousedown', () => { input.mouseDown = true; });
-  window.addEventListener('mouseup', () => { input.mouseDown = false; });
+  // ---------- Responsive fit ----------
+  // The canvas keeps a fixed logical resolution; only its CSS size changes so it
+  // letterboxes cleanly into any phone (or desktop) viewport without touching game math.
+  const stage = document.getElementById('stage');
+  function fitStage() {
+    const scale = Math.min(window.innerWidth / bounds.width, window.innerHeight / bounds.height);
+    stage.style.transform = `scale(${scale})`;
+  }
+  window.addEventListener('resize', fitStage);
+  window.addEventListener('orientationchange', fitStage);
+  fitStage();
 
   // ---------- DOM refs ----------
   const el = {
@@ -135,8 +130,9 @@
   function update(dt) {
     if (state !== 'playing') return;
 
-    player.update(dt, input, bounds);
-    if (input.mouseDown) {
+    const control = input.getControlState(player.x, player.y, player.aimAngle);
+    player.update(dt, control, bounds);
+    if (control.firing) {
       const bullet = player.tryFire();
       if (bullet) bullets.push(bullet);
     }
@@ -225,12 +221,34 @@
     }
   }
 
+  function drawStick(stick, color) {
+    if (!stick.active) return;
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineWidth = 2;
+    ctx.globalAlpha = 0.9;
+    ctx.beginPath();
+    ctx.arc(stick.originX, stick.originY, JOYSTICK_MAX_RADIUS, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = 0.55;
+    ctx.beginPath();
+    ctx.arc(stick.curX, stick.curY, 22, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
   function render() {
     drawArenaBackground();
     base.draw(ctx);
     for (const enemy of enemies) enemy.draw(ctx);
     for (const bullet of bullets) bullet.draw(ctx);
     if (state !== 'gameover') player.draw(ctx);
+
+    if (state === 'playing') {
+      drawStick(input.moveStick, 'rgba(79, 220, 111, 0.9)');
+      drawStick(input.aimStick, 'rgba(255, 95, 95, 0.9)');
+    }
   }
 
   // ---------- Main loop ----------
@@ -260,6 +278,8 @@
       bullets: bullets.length,
       player: { x: player.x, y: player.y, health: player.health },
       base: { x: base.x, y: base.y, health: base.health },
+      moveStick: { active: input.moveStick.active, ...input.moveStick.read() },
+      aimStick: { active: input.aimStick.active, ...input.aimStick.read() },
     }),
   };
 })();

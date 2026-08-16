@@ -2,14 +2,25 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
 <title>Base Defense</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22><rect width=%2232%22 height=%2232%22 fill=%22%2312151c%22/><rect x=%228%22 y=%228%22 width=%2216%22 height=%2216%22 fill=%22%232472c8%22/></svg>">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <div id="rotate-overlay">
+    <div id="rotate-panel">
+      <div id="rotate-icon">&#128241;</div>
+      <p>Rotate your device to landscape to play.</p>
+    </div>
+  </div>
+
   <div id="game-container">
-    <canvas id="game-canvas" width="960" height="640"></canvas>
+   <div id="stage">
+    <canvas id="game-canvas" width="960" height="540"></canvas>
 
     <div id="hud">
       <div id="hud-left">
@@ -21,16 +32,13 @@
           <div class="bar-fill" id="base-health-fill"></div>
           <span class="bar-label">Base HP: <span id="base-health-text"></span></span>
         </div>
+        <div class="bar" id="player-health-bar">
+          <div class="bar-fill" id="player-health-fill"></div>
+          <span class="bar-label">HP: <span id="player-health-text"></span></span>
+        </div>
       </div>
       <div id="hud-right">
         <div class="hud-row">Gold: <span id="gold-amount">0</span></div>
-      </div>
-    </div>
-
-    <div id="player-status">
-      <div class="bar" id="player-health-bar">
-        <div class="bar-fill" id="player-health-fill"></div>
-        <span class="bar-label">HP: <span id="player-health-text"></span></span>
       </div>
     </div>
 
@@ -56,16 +64,18 @@
         <h1>Base Defense</h1>
         <p>Waves of enemies will attack your base. Defend it, earn gold, and buy upgrades between waves.</p>
         <ul class="controls-list">
-          <li><b>WASD / Arrows</b> — move</li>
-          <li><b>Mouse</b> — aim</li>
-          <li><b>Click / Hold</b> — shoot</li>
+          <li><b>Left thumb</b> — drag to move</li>
+          <li><b>Right thumb</b> — drag to aim &amp; fire</li>
+          <li class="controls-list-desktop"><b>WASD/mouse</b> — desktop fallback</li>
         </ul>
         <button id="start-btn">Start Game</button>
       </div>
     </div>
+   </div>
   </div>
 
   <script src="src/vector.js"></script>
+  <script src="src/input.js"></script>
   <script src="src/entities.js"></script>
   <script src="src/waves.js"></script>
   <script src="src/shop.js"></script>
