@@ -62,10 +62,14 @@ class Renderer3D {
   worldX(x) { return x - this.cx; }
   worldZ(y) { return y - this.cy; }
 
-  /** Yaw (radians around world +Y) that makes a model's default "faces +Z" orientation point
-   *  along the given 2D logical-space angle (atan2 convention: 0 = +x/east, increasing toward +y/south). */
+  /** Yaw (radians around world +Y) that makes a model's local +X axis — the forward direction
+   *  every rig here is built along (legs/arms straddle it, the weapon points down it, a bullet's
+   *  capsule is twisted to lie along it) — point along the given 2D logical-space angle (atan2
+   *  convention: 0 = +x/east, increasing toward +y/south). Three.js's Y-rotation matrix maps
+   *  local +X to world (cos θ, -sin θ) in (x, z); solving cos θ = cos(angle), -sin θ = sin(angle)
+   *  gives θ = -angle. */
   yawFromAngle(angle) {
-    return Math.atan2(Math.cos(angle), Math.sin(angle));
+    return -angle;
   }
 
   /** Projects a logical (x, y) ground point + height to canvas-pixel screen space, for 2D
@@ -460,19 +464,22 @@ class Renderer3D {
     cloak.castShadow = true;
     rig.group.add(cloak);
 
+    // The barrel reaches exactly PLAYER_MUZZLE_DISTANCE (entities.js) from the group origin, so
+    // Player.getMuzzlePosition() — where bullets actually spawn — always matches the visible tip.
     const weaponPivot = new THREE.Group();
     weaponPivot.position.set(rig.torsoRadius * 0.9, rig.legLen + rig.torsoLen + rig.headRadius * 0.1, 0);
+    const muzzleReach = PLAYER_MUZZLE_DISTANCE - weaponPivot.position.x;
     const weaponMat = new THREE.MeshStandardMaterial({ color: 0x8a8a94, roughness: 0.4, metalness: 0.6 });
     const weaponBar = new THREE.Mesh(Renderer3D._geo().cylinder, weaponMat);
-    weaponBar.scale.set(1.3, 24, 1.3);
+    weaponBar.scale.set(1.3, muzzleReach, 1.3);
     weaponBar.rotation.z = Math.PI / 2;
-    weaponBar.position.x = 12;
+    weaponBar.position.x = muzzleReach / 2;
     weaponBar.castShadow = true;
     weaponPivot.add(weaponBar);
     const tipMat = new THREE.MeshStandardMaterial({ color: 0xf0d98c, emissive: 0xf0d98c, emissiveIntensity: 1.6 });
     const tip = new THREE.Mesh(Renderer3D._geo().sphere, tipMat);
     tip.scale.setScalar(1.8);
-    tip.position.x = 24;
+    tip.position.x = muzzleReach;
     weaponPivot.add(tip);
     rig.group.add(weaponPivot);
 

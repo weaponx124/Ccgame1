@@ -23,12 +23,12 @@ class Base {
   }
 }
 
-// Shared between Player.getMuzzlePosition() and the old 2D renderer; kept here since the muzzle
-// position is gameplay state (where bullets actually spawn), not just a visual detail.
-const PLAYER_LEG_LEN_MULT = 1.15;
-const PLAYER_TORSO_LEN_MULT = 1.35;
-const PLAYER_WEAPON_PIVOT_X_MULT = 0.3;
-const PLAYER_WEAPON_PIVOT_Y_MULT = 0.22;
+// How far from the player's ground position (in the aim direction) bullets spawn. Shared with
+// Renderer3D.buildPlayerModel() (src/render3d.js), which builds the weapon model to reach
+// exactly this far, so the visible barrel tip and the actual bullet spawn point can never drift
+// apart. The player now truly rotates to face aimAngle (see Renderer3D.yawFromAngle) rather than
+// mirroring like the old 2D renderer did, so this is just a straight radial offset.
+const PLAYER_MUZZLE_DISTANCE = 34;
 
 class Player {
   constructor(x, y) {
@@ -57,18 +57,9 @@ class Player {
 
   /** World-space position of the weapon's muzzle — where bullets actually spawn. */
   getMuzzlePosition() {
-    const r = this.radius;
-    const facingRight = Math.cos(this.aimAngle) >= 0;
-    const shoulderY = -r * PLAYER_LEG_LEN_MULT - r * PLAYER_TORSO_LEN_MULT;
-    const pivotX = r * PLAYER_WEAPON_PIVOT_X_MULT;
-    const pivotY = shoulderY + r * PLAYER_WEAPON_PIVOT_Y_MULT;
-    const localAngle = facingRight ? this.aimAngle : Math.PI - this.aimAngle;
-    const muzzleLen = r * WEAPON_MUZZLE_LENGTH;
-    const tipLocalX = pivotX + Math.cos(localAngle) * muzzleLen;
-    const tipLocalY = pivotY + Math.sin(localAngle) * muzzleLen;
     return {
-      x: this.x + (facingRight ? tipLocalX : -tipLocalX),
-      y: this.y + tipLocalY,
+      x: this.x + Math.cos(this.aimAngle) * PLAYER_MUZZLE_DISTANCE,
+      y: this.y + Math.sin(this.aimAngle) * PLAYER_MUZZLE_DISTANCE,
     };
   }
 

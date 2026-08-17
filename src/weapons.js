@@ -1,11 +1,6 @@
 // Weapon catalog: purchasable/equippable weapons for the demon hunter. Each weapon modifies
 // the player's base (upgradeable) damage/fireRate/bulletSpeed with its own multipliers and
 // firing pattern, so shop upgrades stay meaningful no matter which weapon is equipped.
-//
-// WEAPON_MUZZLE_LENGTH is shared with Player.getMuzzlePosition() (entities.js) so bullets always
-// spawn from the same point the 3D weapon model is built to end at.
-
-const WEAPON_MUZZLE_LENGTH = 0.95; // multiplied by player radius
 
 const WEAPON_TYPES = {
   crossbow: {
