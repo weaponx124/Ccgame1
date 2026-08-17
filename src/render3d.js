@@ -651,7 +651,11 @@ class Renderer3D {
     // relative to this rest height, so a standing-still character never looks perfectly frozen.
     const headBaseY = headGroup.position.y;
 
-    return { group, hipL, hipR, kneeL, kneeR, shoulderL, shoulderR, elbowL, elbowR, torso, torsoMat, head, headMat, headGroup, headBaseY, eye, eyeMat, eyeGlow, legLen, torsoLen, headRadius, torsoRadius };
+    return {
+      group, hipL, hipR, kneeL, kneeR, shoulderL, shoulderR, elbowL, elbowR,
+      torso, torsoMat, head, headMat, headGroup, headBaseY, eye, eyeMat, eyeGlow,
+      legLen, torsoLen, headRadius, torsoRadius, thighLen, shinLen, upperArmLen, forearmLen,
+    };
   }
 
   buildPlayerModel() {
@@ -666,6 +670,23 @@ class Renderer3D {
     cloak.rotation.x = Math.PI;
     cloak.castShadow = true;
     rig.group.add(cloak);
+
+    // A pointed hood riding on the head (moves with the idle breathing bob) — what actually reads
+    // as "hooded hunter" instead of just "guy with a cape".
+    const hood = new THREE.Mesh(new THREE.ConeGeometry(rig.headRadius * 1.05, rig.headRadius * 2.4, 8, 1, true), cloakMat);
+    hood.position.set(0, rig.headRadius * 0.5, -rig.headRadius * 0.35);
+    hood.rotation.x = Math.PI * 0.94;
+    hood.castShadow = true;
+    rig.headGroup.add(hood);
+
+    // A diagonal bandolier strap across the chest — hunter's gear, not bare clothing.
+    const strapMat = new THREE.MeshStandardMaterial({ color: 0x2a1c14, roughness: 0.85 });
+    const strap = new THREE.Mesh(Renderer3D._geo().box, strapMat);
+    strap.scale.set(2.2, rig.torsoLen * 1.05, 2.4);
+    strap.position.set(rig.torsoRadius * 0.3, rig.legLen + rig.torsoLen / 2, rig.torsoRadius * 0.4);
+    strap.rotation.z = 0.55;
+    strap.castShadow = true;
+    rig.group.add(strap);
 
     // The barrel reaches exactly PLAYER_MUZZLE_DISTANCE (entities.js) from the group origin, so
     // Player.getMuzzlePosition() — where bullets actually spawn — always matches the visible tip.
@@ -710,6 +731,32 @@ class Renderer3D {
     jaw.scale.set(rig.headRadius * 0.45, rig.headRadius * 0.3, rig.headRadius * 0.4);
     jaw.position.set(0, rig.legLen + rig.torsoLen - rig.headRadius * 0.2, rig.headRadius * 0.5);
     rig.group.add(jaw);
+
+    // Exposed ribs on the chest — a rotting corpse, not just a green person.
+    const ribMat = new THREE.MeshStandardMaterial({ color: 0xd8d0b8, roughness: 0.8 });
+    for (const rx of [-2.6, -0.6, 1.6]) {
+      const rib = new THREE.Mesh(Renderer3D._geo().box, ribMat);
+      rib.scale.set(1, 5.5, 1.1);
+      rib.position.set(rx, rig.legLen + rig.torsoLen * 0.58, rig.torsoRadius * 0.88);
+      rig.group.add(rib);
+    }
+
+    // A dark rot patch decal on the torso.
+    const rotMat = new THREE.MeshStandardMaterial({ color: 0x232f16, roughness: 1 });
+    const rotPatch = new THREE.Mesh(Renderer3D._geo().sphere, rotMat);
+    rotPatch.scale.set(3, 2, 0.5);
+    rotPatch.position.set(3.4, rig.legLen + rig.torsoLen * 0.78, rig.torsoRadius * 0.92);
+    rig.group.add(rotPatch);
+
+    // Patchy scalp — a few ragged tufts instead of a bald sphere.
+    const hairMat = new THREE.MeshStandardMaterial({ color: 0x14170c, roughness: 1 });
+    for (const [hx, hz] of [[-2.6, -2.4], [2.1, -1.6], [0.3, -3.3]]) {
+      const tuft = new THREE.Mesh(Renderer3D._geo().cone, hairMat);
+      tuft.scale.set(0.7, 2.5, 0.7);
+      tuft.position.set(hx, rig.headRadius * 0.75, hz);
+      rig.headGroup.add(tuft);
+    }
+
     return rig;
   }
 
@@ -732,6 +779,30 @@ class Renderer3D {
       fang.rotation.x = Math.PI;
       rig.group.add(fang);
     }
+
+    // Slicked-back hair and a widow's peak — the "aristocrat", not just a pale person with fangs.
+    const hairMat = new THREE.MeshStandardMaterial({ color: 0x0d0508, roughness: 0.4, metalness: 0.2 });
+    const hairCap = new THREE.Mesh(Renderer3D._geo().sphere, hairMat);
+    hairCap.scale.set(rig.headRadius * 1.03, rig.headRadius * 0.6, rig.headRadius * 1.03);
+    hairCap.position.set(0, rig.headRadius * 0.32, -rig.headRadius * 0.1);
+    rig.headGroup.add(hairCap);
+    const peak = new THREE.Mesh(Renderer3D._geo().cone, hairMat);
+    peak.scale.set(0.85, 1.4, 0.85);
+    peak.position.set(0, rig.headRadius * 0.58, rig.headRadius * 0.68);
+    peak.rotation.x = Math.PI;
+    rig.headGroup.add(peak);
+
+    // A popped, angular collar flanking the neck — classic vampire silhouette.
+    const collarMat = new THREE.MeshStandardMaterial({ color: 0x1c0a12, roughness: 0.55 });
+    for (const cx of [-1, 1]) {
+      const collar = new THREE.Mesh(Renderer3D._geo().box, collarMat);
+      collar.scale.set(2, 11, 1.4);
+      collar.position.set(cx * rig.torsoRadius * 0.72, rig.legLen + rig.torsoLen + 3, -1.5);
+      collar.rotation.z = cx * -0.5;
+      collar.castShadow = true;
+      rig.group.add(collar);
+    }
+
     return { ...rig, cape };
   }
 
@@ -747,21 +818,64 @@ class Renderer3D {
       ear.position.set(ex * 3.6, rig.legLen + rig.torsoLen + rig.headRadius * 1.5, -1);
       rig.group.add(ear);
     }
+
+    // A snout, not just a fang floating on a round head — the single biggest thing that reads as
+    // "wolf" instead of "person".
+    const snout = new THREE.Mesh(Renderer3D._geo().box, rig.headMat);
+    snout.scale.set(rig.headRadius * 0.5, rig.headRadius * 0.42, rig.headRadius * 0.95);
+    snout.position.set(0, -rig.headRadius * 0.12, rig.headRadius * 0.85);
+    rig.headGroup.add(snout);
+    const noseMat = new THREE.MeshStandardMaterial({ color: 0x0a0806, roughness: 0.9 });
+    const nose = new THREE.Mesh(Renderer3D._geo().sphere, noseMat);
+    nose.scale.setScalar(rig.headRadius * 0.16);
+    nose.position.set(0, -rig.headRadius * 0.1, rig.headRadius * 1.28);
+    rig.headGroup.add(nose);
     const fangMat = new THREE.MeshStandardMaterial({ color: 0xf4eee0 });
-    const fang = new THREE.Mesh(Renderer3D._geo().cone, fangMat);
-    fang.scale.set(1, 2.4, 1);
-    fang.position.set(0, rig.legLen + rig.torsoLen - rig.headRadius * 0.1, rig.headRadius * 0.9);
-    fang.rotation.x = Math.PI;
-    rig.group.add(fang);
+    for (const fx of [-1, 1]) {
+      const fang = new THREE.Mesh(Renderer3D._geo().cone, fangMat);
+      fang.scale.set(0.75, 1.8, 0.75);
+      fang.position.set(fx * rig.headRadius * 0.28, -rig.headRadius * 0.3, rig.headRadius * 1.05);
+      fang.rotation.x = Math.PI;
+      rig.headGroup.add(fang);
+    }
+
+    // A ragged fur ridge along the spine.
+    const furMat = new THREE.MeshStandardMaterial({ color: 0x3a2a1a, roughness: 1 });
+    for (const fy of [0.28, 0.52, 0.76]) {
+      const spike = new THREE.Mesh(Renderer3D._geo().cone, furMat);
+      spike.scale.set(1.7, 5, 1.7);
+      spike.position.set(0, rig.legLen + rig.torsoLen * fy, -rig.torsoRadius * 0.85);
+      spike.rotation.x = -0.35;
+      rig.group.add(spike);
+    }
+
+    // A tail.
+    const tailMat = new THREE.MeshStandardMaterial({ color: 0x453220, roughness: 0.9 });
+    const tail = new THREE.Mesh(Renderer3D._geo().capsule, tailMat);
+    tail.scale.set(2.6, 15, 2.6);
+    tail.position.set(0, rig.legLen + rig.torsoRadius * 0.35, -rig.torsoRadius * 1.05);
+    tail.rotation.x = Math.PI * 0.4;
+    rig.group.add(tail);
+
+    // Claws on every limb, not just the legs — hands are the ones that actually threaten the player.
     const clawMat = new THREE.MeshStandardMaterial({ color: 0xe8e0d0 });
-    const shinLen = rig.legLen - rig.legLen * 0.5;
     for (const knee of [rig.kneeL, rig.kneeR]) {
       const claw = new THREE.Mesh(Renderer3D._geo().cone, clawMat);
       claw.scale.set(1.2, 3, 1.2);
-      claw.position.set(0, -shinLen + 1, 3);
+      claw.position.set(0, -rig.shinLen + 1, 3);
       claw.rotation.x = Math.PI * 0.6;
       knee.add(claw);
     }
+    for (const elbow of [rig.elbowL, rig.elbowR]) {
+      for (const cx of [-1.4, 0, 1.4]) {
+        const claw = new THREE.Mesh(Renderer3D._geo().cone, clawMat);
+        claw.scale.set(0.8, 2.2, 0.8);
+        claw.position.set(cx, -rig.forearmLen - 1, 1.5);
+        claw.rotation.x = Math.PI * 0.55;
+        elbow.add(claw);
+      }
+    }
+
     return rig;
   }
 
@@ -978,17 +1092,17 @@ class Renderer3D {
     v.group.position.set(this.worldX(player.x), 0, this.worldZ(player.y));
     v.group.rotation.y = this.yawFromAngle(player.aimAngle);
     const swing = player._isMoving ? Math.sin(player._walkPhase) : 0;
-    v.hipL.rotation.x = swing * 0.7;
-    v.hipR.rotation.x = -swing * 0.7;
-    v.shoulderL.rotation.x = -swing * 0.5;
-    v.shoulderR.rotation.x = swing * 0.5;
+    v.hipL.rotation.z = swing * 0.7;
+    v.hipR.rotation.z = -swing * 0.7;
+    v.shoulderL.rotation.z = -swing * 0.5;
+    v.shoulderR.rotation.z = swing * 0.5;
     // Knees/elbows bend as their limb swings forward (never backward — real joints only fold one
     // way), plus a small standing bend so legs never look locked straight. This is what makes the
     // walk read as a jointed stride instead of two stiff pendulums.
-    v.kneeL.rotation.x = 0.12 + Math.max(0, swing) * 1.0;
-    v.kneeR.rotation.x = 0.12 + Math.max(0, -swing) * 1.0;
-    v.elbowL.rotation.x = 0.15 + Math.max(0, -swing) * 0.55;
-    v.elbowR.rotation.x = 0.15 + Math.max(0, swing) * 0.55;
+    v.kneeL.rotation.z = 0.12 + Math.max(0, swing) * 1.0;
+    v.kneeR.rotation.z = 0.12 + Math.max(0, -swing) * 1.0;
+    v.elbowL.rotation.z = 0.15 + Math.max(0, -swing) * 0.55;
+    v.elbowR.rotation.z = 0.15 + Math.max(0, swing) * 0.55;
     // A faint idle breathing bob when standing still, so the hunter never reads as a frozen prop
     // between fights — walking already has its own motion via the leg/arm swing above.
     v.headGroup.position.y = v.headBaseY + (player._isMoving ? 0 : Math.sin(time * 1.7) * 0.6);
@@ -1010,34 +1124,43 @@ class Renderer3D {
       }
       v.group.position.set(this.worldX(e.x), 0, this.worldZ(e.y));
       v.group.rotation.y = this.yawFromAngle(e.angle);
+
+      // Per-species baseline pose, layered under the shared swing/lunge animation below — this is
+      // what makes a zombie shamble with arms out, a vampire stand tall and controlled, and a
+      // werewolf carry a crouched, ready-to-pounce bend even before either one moves.
+      const kneeBase = e.typeKey === 'vampire' ? 0.04 : e.typeKey === 'werewolf' ? 0.24 : 0.12;
+      const zombieReach = e.typeKey === 'zombie' ? 0.4 : 0;
+      v.shoulderL.rotation.x = zombieReach;
+      v.shoulderR.rotation.x = -zombieReach;
+
       if (e._isMoving) {
         const swing = Math.sin(e._walkPhase);
-        v.hipL.rotation.x = swing * 0.7;
-        v.hipR.rotation.x = -swing * 0.7;
-        v.shoulderL.rotation.x = -swing * 0.5;
-        v.shoulderR.rotation.x = swing * 0.5;
+        v.hipL.rotation.z = swing * 0.7;
+        v.hipR.rotation.z = -swing * 0.7;
+        v.shoulderL.rotation.z = -swing * 0.5;
+        v.shoulderR.rotation.z = swing * 0.5;
         // Knees/elbows fold as their limb swings forward, same approach as the hunter — see
         // syncPlayer for why only the forward half of the swing bends the joint.
-        v.kneeL.rotation.x = 0.12 + Math.max(0, swing) * 1.0;
-        v.kneeR.rotation.x = 0.12 + Math.max(0, -swing) * 1.0;
-        v.elbowL.rotation.x = 0.15 + Math.max(0, -swing) * 0.55;
-        v.elbowR.rotation.x = 0.15 + Math.max(0, swing) * 0.55;
+        v.kneeL.rotation.z = kneeBase + Math.max(0, swing) * 1.0;
+        v.kneeR.rotation.z = kneeBase + Math.max(0, -swing) * 1.0;
+        v.elbowL.rotation.z = 0.15 + Math.max(0, -swing) * 0.55;
+        v.elbowR.rotation.z = 0.15 + Math.max(0, swing) * 0.55;
         v.headGroup.position.y = v.headBaseY;
       } else {
         // Standing at contact range: legs planted, arms swing in a short strike-and-recover
         // roughly timed to when the next hit actually lands (ENEMY_ATTACK_INTERVAL, entities.js)
         // instead of idling motionless between hits. A faint breathing bob on top keeps it from
         // reading as frozen in the gaps between strikes.
-        v.hipL.rotation.x = 0;
-        v.hipR.rotation.x = 0;
-        v.kneeL.rotation.x = 0.12;
-        v.kneeR.rotation.x = 0.12;
+        v.hipL.rotation.z = 0;
+        v.hipR.rotation.z = 0;
+        v.kneeL.rotation.z = kneeBase;
+        v.kneeR.rotation.z = kneeBase;
         const sinceAttack = ENEMY_ATTACK_INTERVAL - e._attackCooldown;
         const lunge = sinceAttack >= 0 && sinceAttack < 0.3 ? Math.sin((sinceAttack / 0.3) * Math.PI) : 0;
-        v.shoulderL.rotation.x = -lunge * 0.7;
-        v.shoulderR.rotation.x = lunge * 0.7;
-        v.elbowL.rotation.x = 0.15 + lunge * 0.4;
-        v.elbowR.rotation.x = 0.15 + lunge * 0.4;
+        v.shoulderL.rotation.z = -lunge * 0.7;
+        v.shoulderR.rotation.z = lunge * 0.7;
+        v.elbowL.rotation.z = 0.15 + lunge * 0.4;
+        v.elbowR.rotation.z = 0.15 + lunge * 0.4;
         v.headGroup.position.y = v.headBaseY + Math.sin(time * 1.9 + e.x * 0.05) * 0.5;
       }
       const flash = e._hitFlash > 0 ? clamp(e._hitFlash / 0.08, 0, 1) : 0;

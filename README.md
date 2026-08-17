@@ -131,12 +131,22 @@ None of that is done yet; this repo is still the pure web build.
   `_buildLimbSegments`, render3d.js) that bends as it swings through the
   walk cycle, instead of one capsule running straight from
   shoulder/hip to hand/foot. Hands, boot-shaped feet, shoulder caps
-  (to hide the limb/torso seam), and a waist band are new on all four
-  characters, plus a jaw/chin on the hunter so the face isn't just eye
-  dots on a bare sphere. The hunter and all three monster types keep
-  their per-type extras on top — a tattered cloak and narrow eye-glow
-  on the hunter, ragged tatters and a hanging jaw on zombies, a cape
-  and fangs on vampires, ears/fangs/claws/matted fur on werewolves
+  (to hide the limb/torso seam), and a waist band are on all four
+  characters. The limb swing itself rotates around the model's local
+  "forward" plane (`rotation.z`, since local +X is forward — see
+  `Renderer3D.yawFromAngle`), so a stride actually reads as fore-and-aft
+  motion in whatever direction the character is currently facing,
+  not a fixed sideways kick
+- Each character type is built to be identifiable at a glance, not just
+  a differently-colored copy of the same rig: the hunter wears a
+  pointed hood (not just a cape) and a diagonal bandolier strap;
+  zombies shamble with arms braced outward, exposed ribs, a dark rot
+  patch, and patchy scalp tufts; vampires stand tall with slicked-back
+  hair, a widow's peak, and a popped angular collar; werewolves carry
+  an actual snout (not just a floating fang), a fur ridge down the
+  spine, a tail, and claws on every limb — plus a permanently
+  crouched-forward knee bend where zombies shamble looser and vampires
+  stand straighter (per-type baseline in `syncEnemies`, render3d.js)
 - A denser environment: dead trees, a crypt, flickering lit braziers,
   bone piles, and old blood stains alongside the tombstones
 - A cinematic horror grade on top of the 3D scene: a cold, slightly
