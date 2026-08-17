@@ -514,6 +514,117 @@ class Renderer3D {
     return sprite;
   }
 
+  /** Bakes a small neutral-gray detail texture for creature skin/fur — cached per pattern (there
+   *  are only 4: one per species-ish look), not per character or per color, since it's meant to be
+   *  multiplied against whatever `material.color` already is rather than carry its own tint. Used
+   *  as both the material's `map` and its `bumpMap` (the same luminance doubling as a height
+   *  field) — real surface detail instead of a flat-shaded primitive, without needing a second
+   *  bake or an actual normal map. */
+  static _bakeSkinTexture(pattern) {
+    if (!Renderer3D._skinTexCache) Renderer3D._skinTexCache = {};
+    if (Renderer3D._skinTexCache[pattern]) return Renderer3D._skinTexCache[pattern];
+    const size = 256;
+    const c = document.createElement('canvas');
+    c.width = size; c.height = size;
+    const g = c.getContext('2d');
+    g.fillStyle = '#ffffff';
+    g.fillRect(0, 0, size, size);
+
+    if (pattern === 'mottle') {
+      // Zombie: blotchy rot patches, some dark (decay), some pale (dead tissue).
+      for (let i = 0; i < 46; i++) {
+        const x = Math.random() * size, y = Math.random() * size, r = 6 + Math.random() * 22;
+        const grad = g.createRadialGradient(x, y, 0, x, y, r);
+        const dark = Math.random() < 0.6;
+        grad.addColorStop(0, dark ? 'rgba(0,0,0,0.45)' : 'rgba(255,255,255,0.35)');
+        grad.addColorStop(1, 'rgba(0,0,0,0)');
+        g.fillStyle = grad;
+        g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
+      }
+    } else if (pattern === 'vein') {
+      // Vampire: faint dark veins under pale skin.
+      g.strokeStyle = 'rgba(20,10,40,0.22)';
+      g.lineWidth = 1.4;
+      for (let i = 0; i < 22; i++) {
+        let x = Math.random() * size, y = Math.random() * size;
+        g.beginPath(); g.moveTo(x, y);
+        for (let j = 0; j < 4; j++) { x += (Math.random() - 0.5) * 40; y += (Math.random() - 0.5) * 40; g.lineTo(x, y); }
+        g.stroke();
+      }
+    } else if (pattern === 'fur') {
+      // Werewolf: dense directional strokes for a shaggy coat.
+      for (let i = 0; i < 1100; i++) {
+        const x = Math.random() * size, y = Math.random() * size;
+        const len = 4 + Math.random() * 8;
+        const ang = Math.PI / 2 + (Math.random() - 0.5) * 0.7;
+        g.strokeStyle = Math.random() < 0.5 ? `rgba(0,0,0,${0.15 + Math.random() * 0.25})` : `rgba(255,255,255,${0.1 + Math.random() * 0.2})`;
+        g.lineWidth = 1;
+        g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(ang) * len, y + Math.sin(ang) * len); g.stroke();
+      }
+    } else if (pattern === 'leather') {
+      // Hunter: worn, stitched leather.
+      for (let i = 0; i < 5; i++) {
+        g.strokeStyle = 'rgba(0,0,0,0.18)';
+        g.lineWidth = 2;
+        g.beginPath(); g.moveTo(0, (i + 0.5) * (size / 5)); g.lineTo(size, (i + 0.5) * (size / 5)); g.stroke();
+      }
+      for (let i = 0; i < 260; i++) {
+        const x = Math.random() * size, y = Math.random() * size;
+        g.fillStyle = Math.random() < 0.5 ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.1)';
+        g.fillRect(x, y, 2, 2);
+      }
+    }
+
+    const grain = g.getImageData(0, 0, size, size);
+    for (let i = 0; i < grain.data.length; i += 4) {
+      const n = (Math.random() - 0.5) * 14;
+      grain.data[i] = clamp255(grain.data[i] + n);
+      grain.data[i + 1] = clamp255(grain.data[i + 1] + n);
+      grain.data[i + 2] = clamp255(grain.data[i + 2] + n);
+    }
+    g.putImageData(grain, 0, 0);
+    function clamp255(v) { return v < 0 ? 0 : v > 255 ? 255 : v; }
+
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    Renderer3D._skinTexCache[pattern] = tex;
+    return tex;
+  }
+
+  /** Clones a shared unit geometry and displaces each vertex along its own normal by a small
+   *  random amount, then recomputes normals — turns a mathematically perfect sphere/capsule into
+   *  something that reads as sculpted rather than an obviously untouched primitive. Cached per
+   *  `key` (typically species+part) so every instance of a given species shares one jittered
+   *  geometry instead of each character getting its own (and paying for it). */
+  static _jitteredGeo(key, baseGeo, amount) {
+    if (!Renderer3D._jitterCache) Renderer3D._jitterCache = {};
+    if (Renderer3D._jitterCache[key]) return Renderer3D._jitterCache[key];
+    const geo = baseGeo.clone();
+    const pos = geo.attributes.position;
+    const norm = geo.attributes.normal;
+    for (let i = 0; i < pos.count; i++) {
+      const nx = norm.getX(i), ny = norm.getY(i), nz = norm.getZ(i);
+      const d = (Math.random() - 0.5) * 2 * amount;
+      pos.setXYZ(i, pos.getX(i) + nx * d, pos.getY(i) + ny * d, pos.getZ(i) + nz * d);
+    }
+    pos.needsUpdate = true;
+    geo.computeVertexNormals();
+    Renderer3D._jitterCache[key] = geo;
+    return geo;
+  }
+
+  /** A slightly-oversized, backside-only, additive-blended duplicate of a mesh — the classic cheap
+   *  fake for a rim/backlight without a real shader pass. Tinted cool-blue to read as "lit by the
+   *  moon from behind," consistent across every character. */
+  _makeRimShell(geo, opacity = 0.3) {
+    const mat = new THREE.MeshBasicMaterial({
+      color: 0x9fb4ff, transparent: true, opacity, side: THREE.BackSide, blending: THREE.AdditiveBlending, depthWrite: false,
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.scale.setScalar(1.07);
+    return mesh;
+  }
+
   /** A capsule "bone" hanging down -length from its pivot (local origin), radius r, color. Unit
    *  capsule geometry is radius 1, cylindrical length 1 (total height 3), so scale accordingly.
    *  Limbs don't cast shadows — with up to 8 segments per character that's the single biggest
@@ -563,7 +674,8 @@ class Renderer3D {
 
   // ---------- Creatures: a shared rig (legs/arms/torso/head/eye) that per-type builders dress up ----------
   _buildCreatureBase(opts) {
-    const { legLen, legRadius, torsoLen, torsoRadius, headRadius, skinColor, eyeColor, limbColor, torsoColor, hasJaw = true } = opts;
+    const { legLen, legRadius, torsoLen, torsoRadius, headRadius, skinColor, eyeColor, limbColor, torsoColor, hasJaw = true, texturePattern = 'leather' } = opts;
+    const skinTex = Renderer3D._bakeSkinTexture(texturePattern);
     const group = new THREE.Group();
 
     const thighLen = legLen * 0.5;
@@ -601,13 +713,15 @@ class Renderer3D {
       s.add(cap);
     }
 
-    const torsoMat = new THREE.MeshStandardMaterial({ color: torsoColor, roughness: 0.8 });
-    const torso = new THREE.Mesh(Renderer3D._geo().capsule, torsoMat);
+    const torsoMat = new THREE.MeshStandardMaterial({ color: torsoColor, roughness: 0.8, map: skinTex, bumpMap: skinTex, bumpScale: 2.2 });
+    const torsoGeo = Renderer3D._jitteredGeo('torso-' + texturePattern, Renderer3D._geo().capsule, 0.05);
+    const torso = new THREE.Mesh(torsoGeo, torsoMat);
     torso.scale.set(torsoRadius, Math.max(0.1, torsoLen - torsoRadius * 1.6), torsoRadius);
     torso.position.y = legLen + torsoLen / 2;
     torso.castShadow = true;
     torso.receiveShadow = true;
     group.add(torso);
+    torso.add(this._makeRimShell(torsoGeo));
 
     // A waist band breaks up the torso capsule's uniform taper instead of reading as one smooth tube.
     const beltMat = new THREE.MeshStandardMaterial({ color: 0x1a1512, roughness: 0.7 });
@@ -618,11 +732,13 @@ class Renderer3D {
 
     const headGroup = new THREE.Group();
     headGroup.position.y = legLen + torsoLen + headRadius * 0.7;
-    const headMat = new THREE.MeshStandardMaterial({ color: skinColor, roughness: 0.75 });
-    const head = new THREE.Mesh(Renderer3D._geo().sphere, headMat);
+    const headMat = new THREE.MeshStandardMaterial({ color: skinColor, roughness: 0.75, map: skinTex, bumpMap: skinTex, bumpScale: 1.8 });
+    const headGeo = Renderer3D._jitteredGeo('head-' + texturePattern, Renderer3D._geo().sphere, 0.07);
+    const head = new THREE.Mesh(headGeo, headMat);
     head.scale.setScalar(headRadius);
     head.castShadow = true;
     headGroup.add(head);
+    head.add(this._makeRimShell(headGeo, 0.22));
 
     if (hasJaw) {
       // A jaw/chin so the face reads as an actual head shape instead of just eye dots floating on
@@ -718,6 +834,7 @@ class Renderer3D {
       legLen: 22, legRadius: 4, torsoLen: 24, torsoRadius: 8, headRadius: 6,
       skinColor: 0x5f6f3c, eyeColor: 0xe0202f, limbColor: 0x3f5527, torsoColor: 0x4a5828,
       hasJaw: false, // builds its own darker, gaping-jaw shape below instead of the shared one
+      texturePattern: 'mottle',
     });
     const tatterMat = new THREE.MeshStandardMaterial({ color: 0x242c14, roughness: 1, side: THREE.DoubleSide });
     for (const a of [0, 1.2, 2.4, 3.6, 4.8]) {
@@ -764,6 +881,7 @@ class Renderer3D {
     const rig = this._buildCreatureBase({
       legLen: 25, legRadius: 3.4, torsoLen: 23, torsoRadius: 6.5, headRadius: 5.6,
       skinColor: 0xd4c8be, eyeColor: 0xff1030, limbColor: 0x2a1522, torsoColor: 0x3f1826,
+      texturePattern: 'vein',
     });
     const capeMat = new THREE.MeshStandardMaterial({ color: 0x2f050d, roughness: 0.85, side: THREE.DoubleSide });
     const cape = new THREE.Mesh(new THREE.ConeGeometry(13, 40, 6, 1, true), capeMat);
@@ -810,6 +928,7 @@ class Renderer3D {
     const rig = this._buildCreatureBase({
       legLen: 25, legRadius: 6, torsoLen: 32, torsoRadius: 12.5, headRadius: 8,
       skinColor: 0x6b4f38, eyeColor: 0xf0c020, limbColor: 0x453220, torsoColor: 0x5c4530,
+      texturePattern: 'fur',
     });
     const earMat = new THREE.MeshStandardMaterial({ color: 0x2a1e12, roughness: 1 });
     for (const ex of [-1, 1]) {

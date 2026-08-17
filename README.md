@@ -67,10 +67,16 @@ Desktop fallback (used automatically until the page detects a touch):
 - `src/waves.js` — `WaveManager`, which builds and paces enemy spawns per wave
 - `src/shop.js` — the stat-upgrade catalog and purchase logic
 - `src/audio.js` — `AudioManager`, every sound effect in the game
-  synthesized on the fly via the Web Audio API (oscillators/noise bursts
-  through gain and filter envelopes) — no audio files, same "no external
-  runtime dependency" reasoning that got Three.js vendored instead of
-  loaded from a CDN
+  synthesized on the fly via the Web Audio API — no audio files, same
+  "no external runtime dependency" reasoning that got Three.js vendored
+  instead of loaded from a CDN. Beyond bare oscillators/noise bursts,
+  each sound runs through a small effects chain (a procedural
+  convolution-reverb send for space, soft-clip distortion for grit,
+  per-trigger pitch/timing jitter so repeats don't sound robotic, and
+  a sidechain-style "duck" on the big impacts) plus a continuous quiet
+  ambience bed (a detuned low drone + filtered wind) — the difference
+  between "an oscillator beeped" and something that reads as an
+  actually produced sound design
 - `src/game.js` — the main update loop, viewport scaling, state machine
   (start → playing → shop → playing → ... → game over), and the render
   step that feeds live entity state into `Renderer3D` each frame and draws
@@ -152,6 +158,30 @@ None of that is done yet; this repo is still the pure web build.
   spine, a tail, and claws on every limb — plus a permanently
   crouched-forward knee bend where zombies shamble looser and vampires
   stand straighter (per-type baseline in `syncEnemies`, render3d.js)
+- Every character's skin/fur reads as an actual surface, not a flat
+  color: a small baked detail texture per species (rot blotches on
+  zombies, faint veins on vampires, directional fur strokes on
+  werewolves, worn stitched leather on the hunter — `_bakeSkinTexture`,
+  render3d.js) doubles as both the color map and the bump map, so the
+  material actually shades unevenly instead of one uniform flat tone.
+  The torso/head geometry itself is also no longer a mathematically
+  perfect sphere/capsule — a small per-vertex jitter along each
+  vertex's own normal, baked once per species and cached (not paid for
+  per character), breaks up the "obviously a primitive" look. Every
+  character also carries a subtle cool-blue rim-light shell (a
+  slightly oversized, backside-only, additive duplicate mesh) for a
+  consistent "lit from behind by the moon" edge glow
+- The walk-cycle stride itself is angle-aware, not just axis-locked:
+  it blends across the body's local fore-aft and sideways swing planes
+  by the actual movement direction *relative to* which way the body is
+  facing (`Renderer3D._applyStrideSwing`). This matters specifically
+  for the hunter, whose facing (aimAngle, twin-stick convention) and
+  movement (an independent stick/key input) routinely diverge —
+  strafing or backpedaling while aiming elsewhere now visibly swings
+  the legs sideways/backward instead of always swinging fore-and-aft
+  as if the two were the same input. Every enemy's movement direction
+  *is* its facing (there's no independent aim), so this collapses back
+  to a plain forward stride for them automatically
 - A denser environment: dead trees, a crypt, flickering lit braziers,
   bone piles, and old blood stains alongside the tombstones
 - A cinematic horror grade on top of the 3D scene: a cold, slightly
