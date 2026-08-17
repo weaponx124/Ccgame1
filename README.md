@@ -38,22 +38,38 @@ Desktop fallback (used automatically until the page detects a touch):
 ## How it's structured
 
 - `index.html` / `style.css` — page layout, HUD, overlay screens (start,
-  shop, game over), and the responsive/letterboxed mobile viewport
+  shop, game over), and the responsive/letterboxed mobile viewport. Two
+  stacked `<canvas>` elements: `#game-canvas` (WebGL, the 3D scene) and
+  `#fx-canvas` (2D, a transparent screen-space overlay on top of it for
+  joysticks, damage numbers, and placement UI ghosts)
+- `src/vendor/three.min.js` — Three.js, vendored directly (not a CDN
+  `<script>` tag) so the game has no third-party runtime dependency and
+  works identically offline, in restricted network sandboxes, and in
+  production
+- `src/render3d.js` — `Renderer3D`, the entire 3D rendering layer: scene,
+  camera, lighting (moonlit directional light + flickering brazier/altar
+  point lights, all shadow-casting), the baked ground texture, static
+  environment props, and a model factory + per-frame sync method for every
+  entity type. This is the only file that knows Three.js exists
 - `src/vector.js` — small math helpers
 - `src/input.js` — `InputManager`, unifying keyboard/mouse and dual virtual
   joystick touch input into one per-frame control state
-- `src/entities.js` — `Player`, `Base`, `Bullet`, `Enemy` classes
-- `src/weapons.js` — the weapon catalog (stats + firing pattern + visuals)
-  for the loadout system
+- `src/entities.js` — `Player`, `Base`, `Bullet`, `Enemy` — pure gameplay
+  logic/state, no rendering code at all
+- `src/weapons.js` — the weapon catalog (stats + firing pattern) for the
+  loadout system
 - `src/defenses.js` — `Fence`, `Mine`, `Explosion` classes and the tiered
   stat catalog (`FENCE_TIERS`, `MINE_TIERS`) for the manually-placed
-  base-defense shop section
-- `src/effects.js` — `HitSpark` and `DamageNumber`, the cosmetic feedback
-  spawned when a bullet lands
+  base-defense shop section — pure logic, no rendering code
+- `src/effects.js` — `HitSpark`, `DamageNumber`, `BloodPool`, the cosmetic
+  feedback spawned when a bullet lands or an enemy dies — pure state/timing,
+  no rendering code
 - `src/waves.js` — `WaveManager`, which builds and paces enemy spawns per wave
 - `src/shop.js` — the stat-upgrade catalog and purchase logic
-- `src/game.js` — the main update/render loop, viewport scaling, and state
-  machine (start → playing → shop → playing → ... → game over)
+- `src/game.js` — the main update loop, viewport scaling, state machine
+  (start → playing → shop → playing → ... → game over), and the render
+  step that feeds live entity state into `Renderer3D` each frame and draws
+  the 2D overlay on top of it
 
 ## Path to the App Store
 
@@ -82,26 +98,26 @@ None of that is done yet; this repo is still the pure web build.
 - Six purchasable upgrades (bolt damage, fire rate, move speed, max HP,
   crit chance, ward repair)
 - Ward destroyed = game over; hunter death just costs some gold and respawns
-- Gothic horror visual pass: a heavier, cooler-lit palette (cold moonlight
-  against warm brazier fire), a mottled/uneven ground with old dried blood
-  stains and bone piles, a stronger tinted vignette, and a film-grain
-  overlay baked once into a repeating pattern for cheap per-frame grit.
-  Monsters and the hunter got a grittier redesign: jagged torn silhouettes
-  instead of smooth shapes, exposed ribs and a hanging jaw on zombies,
-  fangs and blood at the mouth on vampires and werewolves, claws and
-  matted fur on the werewolf, a tattered cloak and a narrow predatory
-  eye-glow on the hunter. Enemy kills now leave a permanent (slow-fading)
-  blood pool on the ground, and hit sparks/damage numbers read as blood
-  spatter rather than gold sparks. The ward altar weeps old blood down its
-  face and has a small skull etched into its glowing core. All still pure
-  Canvas 2D — no 3D or external art assets
-- Fixed 3/4-elevated "camera" (Vampire Survivors/Brotato-style): characters
-  don't rotate to face their direction, they mirror left/right and have
-  procedurally animated two-segment limbs that swing on a walk cycle driven
-  by actual distance travelled, so motion freezes when something is
-  stationary instead of animating in place
+- Real 3D rendering (Three.js/WebGL), not hand-drawn Canvas 2D vector art:
+  actual lit geometry, materials, and cast shadows from a moonlit
+  directional light plus flickering brazier and altar point lights. The
+  hunter and all three monster types are built from primitive meshes
+  (capsule limbs on animated pivot "joints" for the walk cycle, sphere
+  heads, a torso, plus per-type extras — a tattered cloak and narrow
+  eye-glow on the hunter, ragged tatters and a hanging jaw on zombies, a
+  cape and fangs on vampires, ears/fangs/claws/matted fur on werewolves).
+  The ground is a baked, textured plane (moss, cracks, old blood stains,
+  grain) rather than a flat fill, and the environment — tombstones, a
+  crypt, dead trees, bone piles, braziers — is real modeled geometry
+  casting real shadows, not painted decoration. Enemy kills leave a
+  permanent (slow-fading) blood decal on the ground, and hit sparks read
+  as a burst of small blood-red particles. The camera is a fixed,
+  perspective 3/4-elevated angle over the whole arena — characters
+  actually rotate to face their movement/aim direction now, instead of
+  the old 2D mirror-flip trick. Three.js is vendored in `src/vendor/`
+  rather than loaded from a CDN, so there's no external runtime dependency
 - A denser environment: dead trees, a crypt, flickering lit braziers,
-  cracked ground and moss patches alongside the tombstones
+  bone piles, and old blood stains alongside the tombstones
 - A weapon loadout system: the crossbow (starting weapon), a blunderbuss
   (3-shard spread), and a chakram (slow, piercing throw) are purchasable
   one-time unlocks in the shop's Weapons section. Switch between owned
@@ -155,6 +171,19 @@ None of that is done yet; this repo is still the pure web build.
   get an expanding shockwave ring, a core flash, and scattering embers
   instead of just vanishing; taking damage on the player or the ward
   flashes a brief red screen tint so a hit always reads as a hit
+
+## A note on the 3D rendering
+
+This dev sandbox can only run headless Chromium with software-rendered
+WebGL (no real GPU), so while the 3D pipeline has been tested thoroughly
+for correctness (gameplay logic, placement raycasting, save/load, combat,
+no console errors), its actual frame rate on a real phone GPU hasn't been
+verified from here — worth checking on an actual device once deployed.
+Shadow casters were already trimmed (limbs/decorations don't cast shadows,
+only torsos/heads/major props do) and antialiasing/shadow quality tuned
+down as a reasonable default; if it's heavy on lower-end phones, the next
+places to cut are shadow map resolution (`src/render3d.js`, `_buildLighting`)
+and disabling shadows entirely below some device threshold.
 
 ## Ideas for expanding
 

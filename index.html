@@ -24,6 +24,7 @@
   <div id="game-container">
    <div id="stage">
     <canvas id="game-canvas" width="960" height="540"></canvas>
+    <canvas id="fx-canvas" width="960" height="540"></canvas>
 
     <button id="pause-btn" class="hidden" aria-label="Pause menu">&#10074;&#10074;</button>
     <button id="weapon-switch-btn" class="hidden" aria-label="Swap weapon">Crossbow</button>
@@ -131,6 +132,7 @@
    </div>
   </div>
 
+  <script src="src/vendor/three.min.js"></script>
   <script src="src/vector.js"></script>
   <script src="src/input.js"></script>
   <script src="src/weapons.js"></script>
@@ -140,6 +142,7 @@
   <script src="src/waves.js"></script>
   <script src="src/shop.js"></script>
   <script src="src/save.js"></script>
+  <script src="src/render3d.js"></script>
   <script src="src/game.js"></script>
 </body>
 </html>

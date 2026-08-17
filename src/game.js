@@ -2,16 +2,21 @@
 
 (function () {
   const canvas = document.getElementById('game-canvas');
-  const ctx = canvas.getContext('2d');
+  const fxCanvas = document.getElementById('fx-canvas');
+  const fx = fxCanvas.getContext('2d');
   const bounds = { width: canvas.width, height: canvas.height };
   const input = new InputManager(canvas, bounds);
 
-  // Render at native device pixel density so gradients/shading stay crisp on phones,
-  // while all game math keeps using the logical 960x540 `bounds` above.
+  // Render at native device pixel density so text/lines on the 2D overlay stay crisp on
+  // phones, while all game math keeps using the logical 960x540 `bounds` above. The WebGL
+  // canvas manages its own backing-buffer sizing (Renderer3D below); this HiDPI setup is only
+  // for the 2D overlay canvas's own context.
   const dpr = Math.min(window.devicePixelRatio || 1, 3);
-  canvas.width = bounds.width * dpr;
-  canvas.height = bounds.height * dpr;
-  ctx.scale(dpr, dpr);
+  fxCanvas.width = bounds.width * dpr;
+  fxCanvas.height = bounds.height * dpr;
+  fx.scale(dpr, dpr);
+
+  const renderer3d = new Renderer3D(canvas, bounds, dpr);
 
   // ---------- Responsive fit ----------
   // The canvas keeps a fixed logical resolution; only its CSS size changes so it
@@ -293,7 +298,8 @@
   function handlePlacementTap(clientX, clientY) {
     if (!placementMode) return;
     const p = input.toCanvasSpace(clientX, clientY);
-    placeAt(p.x, p.y);
+    const ground = renderer3d.screenToGround(p.x, p.y);
+    if (ground) placeAt(ground.x, ground.y);
   }
 
   /** Places (or flashes invalid at) canvas-space coordinates — shared by the real tap handler and debug hooks. */
@@ -402,12 +408,15 @@
     }
     if (state === 'shop' && shopHidden) {
       const p = input.toCanvasSpace(e.clientX, e.clientY);
-      handleFieldTap(p.x, p.y);
+      const ground = renderer3d.screenToGround(p.x, p.y);
+      if (ground) handleFieldTap(ground.x, ground.y);
     }
   });
   canvas.addEventListener('pointermove', (e) => {
     if (!placementMode) return;
-    placementCursor = input.toCanvasSpace(e.clientX, e.clientY);
+    const p = input.toCanvasSpace(e.clientX, e.clientY);
+    const ground = renderer3d.screenToGround(p.x, p.y);
+    if (ground) placementCursor = ground;
   });
 
   function renderWeaponItems() {
@@ -711,7 +720,11 @@
 
     if (state !== 'playing') return;
 
-    const control = input.getControlState(player.x, player.y, player.aimAngle);
+    // Desktop mouse-aim needs the player's on-screen (projected) position, not its logical
+    // world position — those only coincided in the old straight-down 2D camera. Touch aim is
+    // unaffected: the aim joystick works purely off its own drag vector, no projection involved.
+    const playerScreen = renderer3d.worldToScreen(player.x, player.y, 20);
+    const control = input.getControlState(playerScreen.x, playerScreen.y, player.aimAngle);
     player.update(dt, control, bounds);
     if (control.firing) {
       bullets.push(...player.tryFire());
@@ -794,8 +807,9 @@
           enemy.takeDamage(bullet.damage);
           bullet.hitEnemies.add(enemy);
           const hitAngle = Math.atan2(bullet.vy, bullet.vx);
-          hitEffects.push(new HitSpark(hitCenter.x, hitCenter.y, hitAngle, bullet.isCrit));
-          hitEffects.push(new DamageNumber(hitCenter.x, hitCenter.y, bullet.damage, bullet.isCrit));
+          const hitHeight = enemy.radius * 1.45;
+          hitEffects.push(new HitSpark(enemy.x, enemy.y, hitHeight, hitAngle, bullet.isCrit));
+          hitEffects.push(new DamageNumber(enemy.x, enemy.y, hitHeight, bullet.damage, bullet.isCrit));
           if (!enemy.alive) {
             gold += enemy.reward;
             bloodPools.push(new BloodPool(enemy.x, enemy.y, enemy.radius / 12));
@@ -853,452 +867,38 @@
   function updateWaveClearBannerUI() {
     el.waveClearSeconds.textContent = Math.max(0, Math.ceil(waveClearTimer));
   }
-
-  // ---------- Render: gothic graveyard atmosphere ----------
-  // Fixed decorative tombstones, kept out of the central play area.
-  const TOMBSTONES = [
-    { x: 55, y: 70, scale: 1.0, rot: -0.12 },
-    { x: 905, y: 85, scale: 0.85, rot: 0.16 },
-    { x: 40, y: 465, scale: 1.1, rot: 0.06 },
-    { x: 915, y: 470, scale: 0.9, rot: -0.09 },
-    { x: 480, y: 34, scale: 0.7, rot: 0.02 },
-    { x: 180, y: 500, scale: 0.75, rot: -0.05 },
-  ];
-
-  function drawTombstone(x, y, scale, rot) {
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.rotate(rot);
-    ctx.scale(scale, scale);
-
-    ctx.fillStyle = 'rgba(0,0,0,0.35)';
-    ctx.beginPath();
-    ctx.ellipse(2, 24, 17, 6, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    const grad = ctx.createLinearGradient(-14, -22, 14, 20);
-    grad.addColorStop(0, '#3a3440');
-    grad.addColorStop(1, '#141018');
-    ctx.fillStyle = grad;
-    ctx.strokeStyle = 'rgba(140,120,100,0.35)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(-14, 20);
-    ctx.lineTo(-14, -8);
-    ctx.arc(0, -8, 14, Math.PI, 0);
-    ctx.lineTo(14, 20);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.strokeStyle = 'rgba(0,0,0,0.55)';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(0, -10);
-    ctx.lineTo(0, 8);
-    ctx.moveTo(-6, -2);
-    ctx.lineTo(6, -2);
-    ctx.stroke();
-
-    ctx.restore();
-  }
-
-  const DEAD_TREES = [
-    { x: 140, y: 220, scale: 1.0, rot: -0.06 },
-    { x: 820, y: 195, scale: 0.85, rot: 0.08 },
-    { x: 720, y: 480, scale: 0.95, rot: -0.04 },
-  ];
-
-  function drawDeadTree(x, y, scale, rot) {
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.rotate(rot);
-    ctx.scale(scale, scale);
-
-    ctx.fillStyle = 'rgba(0,0,0,0.35)';
-    ctx.beginPath();
-    ctx.ellipse(2, 4, 20, 6, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.strokeStyle = '#1c1512';
-    ctx.lineCap = 'round';
-    ctx.lineWidth = 5;
-    ctx.beginPath();
-    ctx.moveTo(0, 4);
-    ctx.lineTo(-2, -34);
-    ctx.stroke();
-
-    ctx.strokeStyle = '#241a16';
-    ctx.lineWidth = 3;
-    const branches = [
-      [-2, -34, -20, -50],
-      [-2, -34, 12, -46],
-      [-20, -50, -30, -62],
-      [-20, -50, -10, -64],
-      [12, -46, 24, -58],
-    ];
-    for (const [x1, y1, x2, y2] of branches) {
-      ctx.beginPath();
-      ctx.moveTo(x1, y1);
-      ctx.lineTo(x2, y2);
-      ctx.stroke();
-    }
-    ctx.restore();
-  }
-
-  function drawCrypt(x, y) {
-    ctx.save();
-    ctx.translate(x, y);
-
-    ctx.fillStyle = 'rgba(0,0,0,0.4)';
-    ctx.beginPath();
-    ctx.ellipse(4, 34, 46, 12, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    const grad = ctx.createLinearGradient(-40, -46, 40, 30);
-    grad.addColorStop(0, '#39323f');
-    grad.addColorStop(1, '#120d16');
-    ctx.fillStyle = grad;
-    ctx.strokeStyle = '#5c4a34';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.rect(-40, -20, 80, 50);
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.beginPath();
-    ctx.moveTo(-46, -20);
-    ctx.lineTo(0, -46);
-    ctx.lineTo(46, -20);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.fillStyle = 'rgba(0,0,0,0.75)';
-    ctx.beginPath();
-    ctx.moveTo(-12, 30);
-    ctx.lineTo(-12, 2);
-    ctx.arc(0, 2, 12, Math.PI, 0);
-    ctx.lineTo(12, 30);
-    ctx.closePath();
-    ctx.fill();
-
-    ctx.fillStyle = '#4a4050';
-    ctx.fillRect(-22, -10, 6, 40);
-    ctx.fillRect(16, -10, 6, 40);
-
-    ctx.strokeStyle = 'rgba(0,0,0,0.6)';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(0, -46);
-    ctx.lineTo(0, -58);
-    ctx.moveTo(-5, -52);
-    ctx.lineTo(5, -52);
-    ctx.stroke();
-
-    ctx.restore();
-  }
-
-  const BRAZIERS = [
-    { x: 250, y: 150 },
-    { x: 700, y: 400 },
-  ];
-
-  function drawBrazierGlow(x, y, time) {
-    const flicker = 0.7 + 0.3 * Math.sin(time * 9 + x) + 0.15 * Math.sin(time * 23 + y);
-    const glowR = 75 * (0.85 + flicker * 0.15);
-    const glow = ctx.createRadialGradient(x, y, 0, x, y, glowR);
-    glow.addColorStop(0, `rgba(255, 140, 50, ${0.16 * flicker})`);
-    glow.addColorStop(1, 'rgba(255, 140, 50, 0)');
-    ctx.fillStyle = glow;
-    ctx.beginPath();
-    ctx.arc(x, y, glowR, 0, Math.PI * 2);
-    ctx.fill();
-    return flicker;
-  }
-
-  function drawBrazier(x, y, flicker) {
-    ctx.save();
-    ctx.translate(x, y);
-
-    ctx.fillStyle = 'rgba(0,0,0,0.35)';
-    ctx.beginPath();
-    ctx.ellipse(2, 14, 12, 4, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.strokeStyle = '#3a3440';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.moveTo(-6, 14);
-    ctx.lineTo(-3, -4);
-    ctx.moveTo(6, 14);
-    ctx.lineTo(3, -4);
-    ctx.stroke();
-
-    ctx.fillStyle = '#2a2430';
-    ctx.beginPath();
-    ctx.ellipse(0, -6, 9, 4, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    const flameH = 14 * flicker;
-    const flameGrad = ctx.createLinearGradient(0, -6, 0, -6 - flameH);
-    flameGrad.addColorStop(0, '#ff8c3c');
-    flameGrad.addColorStop(0.6, '#ffb85c');
-    flameGrad.addColorStop(1, 'rgba(255,220,150,0)');
-    ctx.fillStyle = flameGrad;
-    ctx.beginPath();
-    ctx.moveTo(-4, -6);
-    ctx.quadraticCurveTo(-2, -6 - flameH * 0.6, 0, -6 - flameH);
-    ctx.quadraticCurveTo(2, -6 - flameH * 0.6, 4, -6);
-    ctx.closePath();
-    ctx.fill();
-    ctx.restore();
-  }
-
-  const GROUND_CRACKS = [
-    { x: 300, y: 150, len: 40, rot: 0.4 },
-    { x: 620, y: 110, len: 30, rot: -0.3 },
-    { x: 220, y: 400, len: 35, rot: 1.1 },
-    { x: 640, y: 330, len: 45, rot: -0.8 },
-    { x: 450, y: 460, len: 30, rot: 0.2 },
-    { x: 130, y: 330, len: 26, rot: 0.9 },
-  ];
-
-  function drawCrack(x, y, len, rot) {
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.rotate(rot);
-    ctx.strokeStyle = 'rgba(0,0,0,0.32)';
-    ctx.lineWidth = 1.4;
-    ctx.beginPath();
-    ctx.moveTo(-len / 2, 0);
-    ctx.lineTo(-len / 6, 3);
-    ctx.lineTo(len / 6, -2);
-    ctx.lineTo(len / 2, 2);
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  const MOSS_PATCHES = [
-    { x: 360, y: 220, r: 32 },
-    { x: 600, y: 320, r: 24 },
-    { x: 250, y: 380, r: 28 },
-    { x: 780, y: 300, r: 20 },
-  ];
-
-  function drawMoss(x, y, r) {
-    ctx.fillStyle = 'rgba(40, 55, 30, 0.1)';
-    ctx.beginPath();
-    ctx.ellipse(x, y, r, r * 0.5, 0, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  // Mottled ground blotches — uneven, damp-looking dirt instead of a clean blueprint grid.
-  // Fixed pseudo-random layout computed once at load, not regenerated per frame.
-  const GROUND_BLOTCHES = Array.from({ length: 26 }, (_, i) => {
-    const seed = i * 37.13;
-    return {
-      x: (Math.sin(seed) * 0.5 + 0.5) * bounds.width,
-      y: (Math.sin(seed * 1.7 + 3) * 0.5 + 0.5) * bounds.height,
-      r: 26 + (i % 5) * 12,
-      dark: i % 3 === 0,
-    };
-  });
-
-  function drawGroundBlotch(x, y, r, dark) {
-    const grad = ctx.createRadialGradient(x, y, 0, x, y, r);
-    if (dark) {
-      grad.addColorStop(0, 'rgba(0,0,0,0.14)');
-      grad.addColorStop(1, 'rgba(0,0,0,0)');
-    } else {
-      grad.addColorStop(0, 'rgba(60,48,40,0.14)');
-      grad.addColorStop(1, 'rgba(60,48,40,0)');
-    }
-    ctx.fillStyle = grad;
-    ctx.beginPath();
-    ctx.ellipse(x, y, r, r * 0.6, 0, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  // Old, long-dried blood — permanent stains from hunts past, distinct from the fresh pools
-  // that accumulate during combat.
-  const OLD_BLOOD_STAINS = [
-    { x: 340, y: 260, r: 14, rot: 0.4 },
-    { x: 610, y: 200, r: 10, rot: -0.6 },
-    { x: 560, y: 400, r: 16, rot: 1.1 },
-    { x: 260, y: 340, r: 9, rot: 0.2 },
-  ];
-
-  function drawOldBloodStain(x, y, r, rot) {
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.rotate(rot);
-    ctx.fillStyle = 'rgba(45, 6, 8, 0.28)';
-    for (const [dx, dy, s] of [[0, 0, 1], [r * 0.7, r * 0.2, 0.55], [-r * 0.5, r * 0.4, 0.4], [r * 0.15, -r * 0.5, 0.35]]) {
-      ctx.beginPath();
-      ctx.ellipse(dx, dy, r * s, r * s * 0.6, 0, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.restore();
-  }
-
-  const BONE_PILES = [
-    { x: 420, y: 460 },
-    { x: 800, y: 130 },
-  ];
-
-  function drawBonePile(x, y) {
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.fillStyle = 'rgba(0,0,0,0.3)';
-    ctx.beginPath();
-    ctx.ellipse(1, 3, 16, 5, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.strokeStyle = '#d8cbb4';
-    ctx.lineWidth = 2.4;
-    ctx.lineCap = 'round';
-    for (const [x1, y1, x2, y2] of [[-10, 2, -2, -4], [4, 3, 12, -3], [-4, 4, 6, 2]]) {
-      ctx.beginPath();
-      ctx.moveTo(x1, y1);
-      ctx.lineTo(x2, y2);
-      ctx.stroke();
-    }
-    ctx.fillStyle = '#e4d8c0';
-    ctx.beginPath();
-    ctx.arc(-6, -2, 5.5, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#0a0806';
-    ctx.beginPath();
-    ctx.arc(-7.6, -3, 1, 0, Math.PI * 2);
-    ctx.arc(-4.4, -3, 1, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-  }
-
-  function drawArenaBackground(time) {
-    const grad = ctx.createLinearGradient(0, 0, 0, bounds.height);
-    grad.addColorStop(0, '#1c1624');
-    grad.addColorStop(0.55, '#120e18');
-    grad.addColorStop(1, '#0a070e');
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, bounds.width, bounds.height);
-
-    // Cold moonlight washing down from off-screen, opposing the warm brazier fire below.
-    const moon = ctx.createRadialGradient(bounds.width * 0.5, -bounds.height * 0.3, 0, bounds.width * 0.5, -bounds.height * 0.3, bounds.height * 1.2);
-    moon.addColorStop(0, 'rgba(140, 160, 200, 0.09)');
-    moon.addColorStop(1, 'rgba(140, 160, 200, 0)');
-    ctx.fillStyle = moon;
-    ctx.fillRect(0, 0, bounds.width, bounds.height);
-
-    for (const b of GROUND_BLOTCHES) drawGroundBlotch(b.x, b.y, b.r, b.dark);
-    for (const m of MOSS_PATCHES) drawMoss(m.x, m.y, m.r);
-    for (const c of GROUND_CRACKS) drawCrack(c.x, c.y, c.len, c.rot);
-    for (const s of OLD_BLOOD_STAINS) drawOldBloodStain(s.x, s.y, s.r, s.rot);
-    for (const b of BONE_PILES) drawBonePile(b.x, b.y);
-
-    const flickers = BRAZIERS.map((b) => drawBrazierGlow(b.x, b.y, time));
-
-    for (const t of TOMBSTONES) drawTombstone(t.x, t.y, t.scale, t.rot);
-    for (const t of DEAD_TREES) drawDeadTree(t.x, t.y, t.scale, t.rot);
-    drawCrypt(850, 300);
-
-    BRAZIERS.forEach((b, i) => drawBrazier(b.x, b.y, flickers[i]));
-  }
-
-  // Slow-drifting fog wisps for atmosphere — cool and heavy, weighted toward the ground rather
-  // than evenly scattered, like mist pooling in a graveyard rather than clean studio haze.
-  const FOG = Array.from({ length: 14 }, (_, i) => ({
-    x: (i * 137) % bounds.width,
-    y: bounds.height * (0.45 + ((i * 71) % 100) / 180),
-    r: 70 + (i % 4) * 24,
-    vx: (i % 2 === 0 ? 1 : -1) * (5 + (i % 3) * 2.5),
-    vy: (i % 3 === 0 ? 1 : -1) * (2 + (i % 2) * 1.5),
-    alpha: 0.05 + (i % 3) * 0.02,
-  }));
-
-  function drawFog(dt) {
-    // A static, ground-hugging haze beneath the drifting wisps — the lower the screen, the
-    // murkier it gets, so feet and low terrain features go soft while faces stay readable.
-    const groundMist = ctx.createLinearGradient(0, bounds.height * 0.5, 0, bounds.height);
-    groundMist.addColorStop(0, 'rgba(130,140,150,0)');
-    groundMist.addColorStop(1, 'rgba(130,140,150,0.12)');
-    ctx.fillStyle = groundMist;
-    ctx.fillRect(0, bounds.height * 0.5, bounds.width, bounds.height * 0.5);
-
-    for (const f of FOG) {
-      f.x += f.vx * dt;
-      f.y += f.vy * dt;
-      if (f.x < -f.r) f.x = bounds.width + f.r;
-      if (f.x > bounds.width + f.r) f.x = -f.r;
-      if (f.y < bounds.height * 0.4) f.y = bounds.height * 0.4;
-      if (f.y > bounds.height + f.r) f.y = bounds.height * 0.4;
-
-      const grad = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, f.r);
-      grad.addColorStop(0, `rgba(120,130,138,${f.alpha})`);
-      grad.addColorStop(1, 'rgba(120,130,138,0)');
-      ctx.fillStyle = grad;
-      ctx.beginPath();
-      ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
-
-  function drawVignette() {
-    const grad = ctx.createRadialGradient(
-      bounds.width / 2, bounds.height / 2, bounds.height * 0.24,
-      bounds.width / 2, bounds.height / 2, bounds.height * 0.86
-    );
-    grad.addColorStop(0, 'rgba(0,0,0,0)');
-    grad.addColorStop(0.75, 'rgba(4,3,6,0.32)');
-    grad.addColorStop(1, 'rgba(2,4,3,0.68)');
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, bounds.width, bounds.height);
-  }
-
-  // Precomputed film-grain tile, drawn once and reused as a repeating pattern each frame —
-  // cheap grit that keeps the scene from looking clean/digital.
-  const grainCanvas = document.createElement('canvas');
-  grainCanvas.width = 128;
-  grainCanvas.height = 128;
-  (function bakeGrain() {
-    const gctx = grainCanvas.getContext('2d');
-    const imgData = gctx.createImageData(128, 128);
-    for (let i = 0; i < imgData.data.length; i += 4) {
-      const v = Math.random() * 255;
-      imgData.data[i] = v;
-      imgData.data[i + 1] = v;
-      imgData.data[i + 2] = v;
-      imgData.data[i + 3] = 255;
-    }
-    gctx.putImageData(imgData, 0, 0);
-  })();
-  const grainPattern = ctx.createPattern(grainCanvas, 'repeat');
-
-  function drawGrain() {
-    ctx.save();
-    ctx.globalAlpha = 0.05;
-    ctx.globalCompositeOperation = 'overlay';
-    ctx.fillStyle = grainPattern;
-    ctx.fillRect(0, 0, bounds.width, bounds.height);
-    ctx.restore();
-  }
+  // ---------- Render: sync live game state into the 3D scene, then draw 2D screen-space overlays ----------
+  // Renderer3D (src/render3d.js) owns the actual 3D scene, lighting, models, and static
+  // environment; this file just feeds it live entity state each frame via its sync*() methods.
+  // A few things stay flat 2D on the fx-canvas overlay instead of becoming 3D geometry —
+  // joysticks, damage numbers, and placement/selection ground-plane UI — since they're either
+  // pure screen UI or read more crisply as text/shapes projected from a world position than as
+  // extra meshes to manage.
 
   function drawStick(stick, color) {
     if (!stick.active) return;
-    ctx.save();
-    ctx.strokeStyle = color;
-    ctx.fillStyle = color;
-    ctx.lineWidth = 2;
-    ctx.globalAlpha = 0.9;
-    ctx.beginPath();
-    ctx.arc(stick.originX, stick.originY, JOYSTICK_MAX_RADIUS, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.globalAlpha = 0.55;
-    ctx.beginPath();
-    ctx.arc(stick.curX, stick.curY, 22, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
+    fx.save();
+    fx.strokeStyle = color;
+    fx.fillStyle = color;
+    fx.lineWidth = 2;
+    fx.globalAlpha = 0.9;
+    fx.beginPath();
+    fx.arc(stick.originX, stick.originY, JOYSTICK_MAX_RADIUS, 0, Math.PI * 2);
+    fx.stroke();
+    fx.globalAlpha = 0.55;
+    fx.beginPath();
+    fx.arc(stick.curX, stick.curY, 22, 0, Math.PI * 2);
+    fx.fill();
+    fx.restore();
+  }
+
+  /** Approximate on-screen pixel radius for a circle of `worldRadius` centered at ground (x, y),
+   *  found by projecting the center and an offset point and measuring the projected distance.
+   *  Not exact under perspective, but close enough for UI ghosts at this camera's steep angle. */
+  function screenRadiusAt(x, y, worldRadius) {
+    const center = renderer3d.worldToScreen(x, y);
+    const edge = renderer3d.worldToScreen(x + worldRadius, y);
+    return Math.hypot(edge.x - center.x, edge.y - center.y);
   }
 
   function drawPlacementPreview() {
@@ -1306,98 +906,127 @@
     const { x, y } = placementCursor;
     const valid = isValidPlacement(x, y, placementMode.moving);
     const tiers = placementMode.kind === 'fence' ? FENCE_TIERS : MINE_TIERS;
-    const previewRadius = placementMode.kind === 'fence'
+    const worldRadius = placementMode.kind === 'fence'
       ? tiers[placementMode.tierIndex].slowRadius
       : tiers[placementMode.tierIndex].blastRadius;
+    const p = renderer3d.worldToScreen(x, y);
+    const r = screenRadiusAt(x, y, worldRadius);
     const glow = valid ? 'rgba(120, 220, 140,' : 'rgba(220, 70, 70,';
-    ctx.save();
-    ctx.strokeStyle = `${glow} 0.85)`;
-    ctx.fillStyle = `${glow} 0.15)`;
-    ctx.lineWidth = 2;
-    ctx.setLineDash([5, 4]);
-    ctx.beginPath();
-    ctx.arc(x, y, previewRadius, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-    ctx.setLineDash([]);
+    fx.save();
+    fx.strokeStyle = `${glow} 0.85)`;
+    fx.fillStyle = `${glow} 0.15)`;
+    fx.lineWidth = 2;
+    fx.setLineDash([5, 4]);
+    fx.beginPath();
+    fx.arc(p.x, p.y, r, 0, Math.PI * 2);
+    fx.fill();
+    fx.stroke();
+    fx.setLineDash([]);
 
     if (placementMode.kind === 'fence') {
-      // Shows which way the panel will face, so a wall can be lined up before it's committed.
-      ctx.save();
-      ctx.translate(x, y);
-      ctx.rotate(placementMode.rotation);
-      ctx.strokeStyle = `${glow} 0.95)`;
-      ctx.lineWidth = 4;
-      ctx.lineCap = 'round';
+      // A short line through the ghost showing which way the panel will face once placed,
+      // matching the same rotation-to-world mapping Renderer3D.syncFences uses.
       const hw = FENCE_WIDTH / 2;
-      ctx.beginPath();
-      ctx.moveTo(-hw, 0);
-      ctx.lineTo(hw, 0);
-      ctx.stroke();
-      ctx.restore();
+      const rot = placementMode.rotation;
+      const a = renderer3d.worldToScreen(x + Math.cos(rot) * hw, y - Math.sin(rot) * hw);
+      const b = renderer3d.worldToScreen(x - Math.cos(rot) * hw, y + Math.sin(rot) * hw);
+      fx.strokeStyle = `${glow} 0.95)`;
+      fx.lineWidth = 4;
+      fx.lineCap = 'round';
+      fx.beginPath();
+      fx.moveTo(a.x, a.y);
+      fx.lineTo(b.x, b.y);
+      fx.stroke();
     }
 
-    ctx.beginPath();
-    ctx.arc(x, y, 5, 0, Math.PI * 2);
-    ctx.fillStyle = `${glow} 0.9)`;
-    ctx.fill();
-    ctx.restore();
+    fx.beginPath();
+    fx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+    fx.fillStyle = `${glow} 0.9)`;
+    fx.fill();
+    fx.restore();
   }
 
   function drawInvalidPlacementFlash() {
     if (invalidPlacementFlash <= 0 || !placementCursor) return;
     const t = invalidPlacementFlash / 0.3;
-    ctx.save();
-    ctx.globalAlpha = t;
-    ctx.strokeStyle = 'rgba(255, 60, 60, 0.9)';
-    ctx.lineWidth = 2.5;
-    ctx.beginPath();
-    ctx.arc(placementCursor.x, placementCursor.y, 18 * (1.4 - t), 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.restore();
+    const p = renderer3d.worldToScreen(placementCursor.x, placementCursor.y);
+    fx.save();
+    fx.globalAlpha = t;
+    fx.strokeStyle = 'rgba(255, 60, 60, 0.9)';
+    fx.lineWidth = 2.5;
+    fx.beginPath();
+    fx.arc(p.x, p.y, 18 * (1.4 - t), 0, Math.PI * 2);
+    fx.stroke();
+    fx.restore();
   }
 
   function drawDamageFlash() {
     if (damageFlash <= 0) return;
-    ctx.save();
-    ctx.globalAlpha = damageFlash * 0.45;
-    const grad = ctx.createRadialGradient(
+    fx.save();
+    fx.globalAlpha = damageFlash * 0.45;
+    const grad = fx.createRadialGradient(
       bounds.width / 2, bounds.height / 2, bounds.height * 0.15,
       bounds.width / 2, bounds.height / 2, bounds.height * 0.75
     );
     grad.addColorStop(0, 'rgba(180, 10, 20, 0)');
     grad.addColorStop(1, 'rgba(180, 10, 20, 0.9)');
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, bounds.width, bounds.height);
-    ctx.restore();
+    fx.fillStyle = grad;
+    fx.fillRect(0, 0, bounds.width, bounds.height);
+    fx.restore();
   }
 
   function drawDefenseSelectionRing() {
     if (!selectedDefense || !selectedDefense.ref.alive) return;
     const { ref } = selectedDefense;
-    ctx.save();
-    ctx.strokeStyle = 'rgba(224, 192, 104, 0.9)';
-    ctx.lineWidth = 2;
-    ctx.setLineDash([4, 3]);
-    ctx.beginPath();
-    ctx.arc(ref.x, ref.y, ref.radius + 8, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.restore();
+    const p = renderer3d.worldToScreen(ref.x, ref.y);
+    const r = screenRadiusAt(ref.x, ref.y, ref.radius + 8);
+    fx.save();
+    fx.strokeStyle = 'rgba(224, 192, 104, 0.9)';
+    fx.lineWidth = 2;
+    fx.setLineDash([4, 3]);
+    fx.beginPath();
+    fx.arc(p.x, p.y, r, 0, Math.PI * 2);
+    fx.stroke();
+    fx.setLineDash([]);
+    fx.restore();
+  }
+
+  function drawDamageNumbers() {
+    for (const e of hitEffects) {
+      if (!(e instanceof DamageNumber)) continue;
+      const t = clamp(e.age / e.maxAge, 0, 1);
+      const rise = 24 * t;
+      const p = renderer3d.worldToScreen(e.x, e.y, e.height + rise);
+      fx.save();
+      fx.globalAlpha = t < 0.15 ? t / 0.15 : 1 - (t - 0.15) / 0.85;
+      fx.font = e.isCrit ? 'bold 15px Georgia, serif' : '12px Georgia, serif';
+      fx.textAlign = 'center';
+      fx.fillStyle = e.isCrit ? '#ff3c3c' : '#d8ccc0';
+      fx.strokeStyle = 'rgba(5,3,4,0.9)';
+      fx.lineWidth = 3;
+      const label = e.isCrit ? `${e.text}!` : e.text;
+      fx.strokeText(label, p.x, p.y);
+      fx.fillText(label, p.x, p.y);
+      fx.restore();
+    }
   }
 
   function render(dt) {
-    drawArenaBackground(elapsed);
-    for (const bp of bloodPools) bp.draw(ctx);
-    drawFenceConnections(ctx, fences);
-    for (const mine of mines) mine.draw(ctx, elapsed);
-    for (const fence of fences) fence.draw(ctx);
-    base.draw(ctx, elapsed);
-    for (const enemy of enemies) enemy.draw(ctx);
-    for (const bullet of bullets) bullet.draw(ctx, elapsed);
-    if (state !== 'gameover') player.draw(ctx, elapsed);
-    for (const ex of explosions) ex.draw(ctx);
-    for (const fx of hitEffects) fx.draw(ctx);
+    renderer3d.setPlayerVisible(state !== 'gameover');
+    renderer3d.syncPlayer(player);
+    renderer3d.syncEnemies(enemies);
+    renderer3d.syncBullets(bullets);
+    renderer3d.syncFences(fences);
+    renderer3d.syncMines(mines, elapsed);
+    renderer3d.syncExplosions(explosions);
+    renderer3d.syncBloodPools(bloodPools);
+    renderer3d.syncHitSparks(hitEffects);
+    renderer3d.syncBase(base, elapsed);
+    renderer3d.tickEnvironment(elapsed);
+    renderer3d.render();
+
+    fx.clearRect(0, 0, bounds.width, bounds.height);
+    drawDamageNumbers();
     drawDefenseSelectionRing();
     drawPlacementPreview();
     drawInvalidPlacementFlash();
@@ -1407,10 +1036,7 @@
       drawStick(input.aimStick, 'rgba(255, 95, 95, 0.9)');
     }
 
-    drawFog(dt);
     drawDamageFlash();
-    drawVignette();
-    drawGrain();
   }
 
   // ---------- Main loop ----------
