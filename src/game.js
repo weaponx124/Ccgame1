@@ -180,6 +180,7 @@
       (t) => `Slows enemies nearby; ${t.maxHealth} HP.`);
     renderDefenseTierSection('mine', MINE_TIERS, 'mineTier', 'minesPlaced', MINE_MAX,
       (t) => `${t.damage} dmg in a ${t.blastRadius}px blast.`);
+    updateViewFieldBadge();
   }
 
   function renderDefenseTierSection(kind, tiers, tierKey, placedKey, maxTotal, describe) {
@@ -199,13 +200,23 @@
     if (tierIndex < tiers.length - 1) {
       const nextTier = tiers[tierIndex + 1];
       appendDefenseRow({
-        name: `Upgrade to ${nextTier.name}`,
-        desc: `${describe(nextTier)} Only affects defenses placed after upgrading.`,
+        name: `Research: ${nextTier.name}`,
+        desc: `${describe(nextTier)} Unlocks it for new placements — upgrade ones you've already placed via View Field.`,
         maxed: false,
         cost: nextTier.unlockCost,
         onBuy: () => { defenseState[tierKey] += 1; },
       });
     }
+  }
+
+  /** True once at least one placed fence/mine is behind a tier the player has already researched. */
+  function hasUpgradableDefense() {
+    return fences.some((f) => f.alive && f.tierIndex < defenseState.fenceTier) ||
+      mines.some((m) => m.alive && m.tierIndex < defenseState.mineTier);
+  }
+
+  function updateViewFieldBadge() {
+    document.getElementById('view-field-badge').classList.toggle('hidden', !hasUpgradableDefense());
   }
 
   function appendDefenseRow({ name, desc, maxed, cost, onBuy }) {
@@ -396,6 +407,7 @@
       ref.blastRadius = nextTier.blastRadius;
     }
     updateHud();
+    updateViewFieldBadge();
     selectDefense(kind, ref); // refresh the bar (now shows the new tier, or hides Upgrade if maxed)
   });
 

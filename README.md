@@ -166,7 +166,12 @@ None of that is done yet; this repo is still the pure web build.
   small action bar to Move it (drag it to a new spot for free), Rotate it
   (fences only), or, once you've researched a higher tier, Upgrade it in
   place for that tier's
-  placement cost
+  placement cost. The shop's per-defense "Research: [tier]" row only
+  unlocks that tier for new placements — a caption underneath it and a
+  pulsing badge on the View Field button (only shown once you have an
+  already-placed fence/mine sitting behind a tier you've researched) both
+  point at View Field as the place to actually apply the upgrade to
+  something already on the field
 - Capped shop upgrades (bolt damage, fire rate, move speed, max HP, crit
   chance) show a row of pips under their description — filled pips are
   levels you already own, empty ones are what's left before that upgrade
