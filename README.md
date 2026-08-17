@@ -116,12 +116,7 @@ None of that is done yet; this repo is still the pure web build.
 - Real 3D rendering (Three.js/WebGL), not hand-drawn Canvas 2D vector art:
   actual lit geometry, materials, and cast shadows from a moonlit
   directional light plus flickering brazier and altar point lights. The
-  hunter and all three monster types are built from primitive meshes
-  (capsule limbs on animated pivot "joints" for the walk cycle, sphere
-  heads, a torso, plus per-type extras — a tattered cloak and narrow
-  eye-glow on the hunter, ragged tatters and a hanging jaw on zombies, a
-  cape and fangs on vampires, ears/fangs/claws/matted fur on werewolves).
-  The ground is a baked, textured plane (moss, cracks, old blood stains,
+  ground is a baked, textured plane (moss, cracks, old blood stains,
   grain) rather than a flat fill, and the environment — tombstones, a
   crypt, dead trees, bone piles, braziers — is real modeled geometry
   casting real shadows, not painted decoration. Enemy kills leave a
@@ -131,6 +126,17 @@ None of that is done yet; this repo is still the pure web build.
   actually rotate to face their movement/aim direction now, instead of
   the old 2D mirror-flip trick. Three.js is vendored in `src/vendor/`
   rather than loaded from a CDN, so there's no external runtime dependency
+- Jointed character rigs, not stick figures: every limb is two segments
+  (thigh+shin with a knee, upper-arm+forearm with an elbow —
+  `_buildLimbSegments`, render3d.js) that bends as it swings through the
+  walk cycle, instead of one capsule running straight from
+  shoulder/hip to hand/foot. Hands, boot-shaped feet, shoulder caps
+  (to hide the limb/torso seam), and a waist band are new on all four
+  characters, plus a jaw/chin on the hunter so the face isn't just eye
+  dots on a bare sphere. The hunter and all three monster types keep
+  their per-type extras on top — a tattered cloak and narrow eye-glow
+  on the hunter, ragged tatters and a hanging jaw on zombies, a cape
+  and fangs on vampires, ears/fangs/claws/matted fur on werewolves
 - A denser environment: dead trees, a crypt, flickering lit braziers,
   bone piles, and old blood stains alongside the tombstones
 - A cinematic horror grade on top of the 3D scene: a cold, slightly

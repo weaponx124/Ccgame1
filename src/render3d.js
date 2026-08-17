@@ -516,8 +516,9 @@ class Renderer3D {
 
   /** A capsule "bone" hanging down -length from its pivot (local origin), radius r, color. Unit
    *  capsule geometry is radius 1, cylindrical length 1 (total height 3), so scale accordingly.
-   *  Limbs don't cast shadows — with 4 per character that's the single biggest shadow-map cost,
-   *  and the torso/head shadow alone already reads fine as "someone is standing here". */
+   *  Limbs don't cast shadows — with up to 8 segments per character that's the single biggest
+   *  shadow-map cost, and the torso/head shadow alone already reads fine as "someone is standing
+   *  here". */
   _makeLimb(length, radius, color) {
     const geo = Renderer3D._geo().capsule;
     const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.85 });
@@ -527,27 +528,78 @@ class Renderer3D {
     return mesh;
   }
 
+  /** A two-segment limb (thigh+shin, or upper-arm+forearm): an upper segment hangs from `pivot`,
+   *  then a joint group (knee/elbow) sits at its far end holding the lower segment. Splitting each
+   *  limb into two independently-posable segments — instead of one capsule running straight from
+   *  shoulder/hip to hand/foot — is what actually reads as a jointed limb instead of a stick.
+   *  Returns the joint group so callers can bend it (syncPlayer/syncEnemies) and hang a foot/hand
+   *  off its end. */
+  _buildLimbSegments(pivot, upperLen, upperRadius, lowerLen, lowerRadius, color) {
+    pivot.add(this._makeLimb(upperLen, upperRadius, color));
+    const joint = new THREE.Group();
+    joint.position.y = -upperLen;
+    pivot.add(joint);
+    joint.add(this._makeLimb(lowerLen, lowerRadius, color));
+    return joint;
+  }
+
+  _addFoot(joint, lowerLen, radius, color) {
+    const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.9 });
+    const foot = new THREE.Mesh(Renderer3D._geo().box, mat);
+    foot.scale.set(radius * 2.1, radius * 1.3, radius * 2.9);
+    foot.position.set(0, -lowerLen - radius * 0.35, radius * 0.9);
+    joint.add(foot);
+    return foot;
+  }
+
+  _addHand(joint, lowerLen, radius, color) {
+    const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.8 });
+    const hand = new THREE.Mesh(Renderer3D._geo().sphere, mat);
+    hand.scale.setScalar(radius * 1.4);
+    hand.position.y = -lowerLen;
+    joint.add(hand);
+    return hand;
+  }
+
   // ---------- Creatures: a shared rig (legs/arms/torso/head/eye) that per-type builders dress up ----------
   _buildCreatureBase(opts) {
-    const { legLen, legRadius, torsoLen, torsoRadius, headRadius, skinColor, eyeColor, limbColor, torsoColor } = opts;
+    const { legLen, legRadius, torsoLen, torsoRadius, headRadius, skinColor, eyeColor, limbColor, torsoColor, hasJaw = true } = opts;
     const group = new THREE.Group();
+
+    const thighLen = legLen * 0.5;
+    const shinLen = legLen - thighLen;
+    const armLen = torsoLen * 0.85;
+    const upperArmLen = armLen * 0.46;
+    const forearmLen = armLen - upperArmLen;
 
     const hipL = new THREE.Group();
     hipL.position.set(-torsoRadius * 0.55, legLen, 0);
     const hipR = new THREE.Group();
     hipR.position.set(torsoRadius * 0.55, legLen, 0);
-    hipL.add(this._makeLimb(legLen, legRadius, limbColor));
-    hipR.add(this._makeLimb(legLen, legRadius, limbColor));
+    const kneeL = this._buildLimbSegments(hipL, thighLen, legRadius, shinLen, legRadius * 0.82, limbColor);
+    const kneeR = this._buildLimbSegments(hipR, thighLen, legRadius, shinLen, legRadius * 0.82, limbColor);
+    this._addFoot(kneeL, shinLen, legRadius * 0.82, limbColor);
+    this._addFoot(kneeR, shinLen, legRadius * 0.82, limbColor);
     group.add(hipL, hipR);
 
     const shoulderY = legLen + torsoLen;
     const shoulderL = new THREE.Group();
-    shoulderL.position.set(-torsoRadius * 0.9, shoulderY, 0);
+    shoulderL.position.set(-torsoRadius * 0.95, shoulderY, 0);
     const shoulderR = new THREE.Group();
-    shoulderR.position.set(torsoRadius * 0.9, shoulderY, 0);
-    shoulderL.add(this._makeLimb(torsoLen * 0.85, legRadius * 0.75, limbColor));
-    shoulderR.add(this._makeLimb(torsoLen * 0.85, legRadius * 0.75, limbColor));
+    shoulderR.position.set(torsoRadius * 0.95, shoulderY, 0);
+    const elbowL = this._buildLimbSegments(shoulderL, upperArmLen, legRadius * 0.75, forearmLen, legRadius * 0.6, limbColor);
+    const elbowR = this._buildLimbSegments(shoulderR, upperArmLen, legRadius * 0.75, forearmLen, legRadius * 0.6, limbColor);
+    this._addHand(elbowL, forearmLen, legRadius * 0.6, skinColor);
+    this._addHand(elbowR, forearmLen, legRadius * 0.6, skinColor);
     group.add(shoulderL, shoulderR);
+
+    // Shoulder caps hide the harsh seam where an arm pivot meets the torso.
+    const capMat = new THREE.MeshStandardMaterial({ color: torsoColor, roughness: 0.8 });
+    for (const s of [shoulderL, shoulderR]) {
+      const cap = new THREE.Mesh(Renderer3D._geo().sphere, capMat);
+      cap.scale.setScalar(legRadius * 0.85);
+      s.add(cap);
+    }
 
     const torsoMat = new THREE.MeshStandardMaterial({ color: torsoColor, roughness: 0.8 });
     const torso = new THREE.Mesh(Renderer3D._geo().capsule, torsoMat);
@@ -557,6 +609,13 @@ class Renderer3D {
     torso.receiveShadow = true;
     group.add(torso);
 
+    // A waist band breaks up the torso capsule's uniform taper instead of reading as one smooth tube.
+    const beltMat = new THREE.MeshStandardMaterial({ color: 0x1a1512, roughness: 0.7 });
+    const belt = new THREE.Mesh(Renderer3D._geo().cylinder, beltMat);
+    belt.scale.set(torsoRadius * 1.08, torsoRadius * 0.22, torsoRadius * 1.08);
+    belt.position.y = legLen + torsoRadius * 0.55;
+    group.add(belt);
+
     const headGroup = new THREE.Group();
     headGroup.position.y = legLen + torsoLen + headRadius * 0.7;
     const headMat = new THREE.MeshStandardMaterial({ color: skinColor, roughness: 0.75 });
@@ -564,6 +623,15 @@ class Renderer3D {
     head.scale.setScalar(headRadius);
     head.castShadow = true;
     headGroup.add(head);
+
+    if (hasJaw) {
+      // A jaw/chin so the face reads as an actual head shape instead of just eye dots floating on
+      // a bare sphere.
+      const jaw = new THREE.Mesh(Renderer3D._geo().sphere, headMat);
+      jaw.scale.set(headRadius * 0.55, headRadius * 0.38, headRadius * 0.5);
+      jaw.position.set(0, -headRadius * 0.42, headRadius * 0.55);
+      headGroup.add(jaw);
+    }
 
     const eyeMat = new THREE.MeshStandardMaterial({ color: eyeColor, emissive: eyeColor, emissiveIntensity: 2 });
     const eye = new THREE.Mesh(Renderer3D._geo().sphere, eyeMat);
@@ -583,7 +651,7 @@ class Renderer3D {
     // relative to this rest height, so a standing-still character never looks perfectly frozen.
     const headBaseY = headGroup.position.y;
 
-    return { group, hipL, hipR, shoulderL, shoulderR, torso, torsoMat, head, headMat, headGroup, headBaseY, eye, eyeMat, eyeGlow, legLen, torsoLen, headRadius, torsoRadius };
+    return { group, hipL, hipR, kneeL, kneeR, shoulderL, shoulderR, elbowL, elbowR, torso, torsoMat, head, headMat, headGroup, headBaseY, eye, eyeMat, eyeGlow, legLen, torsoLen, headRadius, torsoRadius };
   }
 
   buildPlayerModel() {
@@ -628,6 +696,7 @@ class Renderer3D {
     const rig = this._buildCreatureBase({
       legLen: 22, legRadius: 4, torsoLen: 24, torsoRadius: 8, headRadius: 6,
       skinColor: 0x5f6f3c, eyeColor: 0xe0202f, limbColor: 0x3f5527, torsoColor: 0x4a5828,
+      hasJaw: false, // builds its own darker, gaping-jaw shape below instead of the shared one
     });
     const tatterMat = new THREE.MeshStandardMaterial({ color: 0x242c14, roughness: 1, side: THREE.DoubleSide });
     for (const a of [0, 1.2, 2.4, 3.6, 4.8]) {
@@ -685,12 +754,13 @@ class Renderer3D {
     fang.rotation.x = Math.PI;
     rig.group.add(fang);
     const clawMat = new THREE.MeshStandardMaterial({ color: 0xe8e0d0 });
-    for (const hip of [rig.hipL, rig.hipR]) {
+    const shinLen = rig.legLen - rig.legLen * 0.5;
+    for (const knee of [rig.kneeL, rig.kneeR]) {
       const claw = new THREE.Mesh(Renderer3D._geo().cone, clawMat);
       claw.scale.set(1.2, 3, 1.2);
-      claw.position.y = -rig.legLen + 2;
-      claw.rotation.x = Math.PI;
-      hip.add(claw);
+      claw.position.set(0, -shinLen + 1, 3);
+      claw.rotation.x = Math.PI * 0.6;
+      knee.add(claw);
     }
     return rig;
   }
@@ -912,6 +982,13 @@ class Renderer3D {
     v.hipR.rotation.x = -swing * 0.7;
     v.shoulderL.rotation.x = -swing * 0.5;
     v.shoulderR.rotation.x = swing * 0.5;
+    // Knees/elbows bend as their limb swings forward (never backward — real joints only fold one
+    // way), plus a small standing bend so legs never look locked straight. This is what makes the
+    // walk read as a jointed stride instead of two stiff pendulums.
+    v.kneeL.rotation.x = 0.12 + Math.max(0, swing) * 1.0;
+    v.kneeR.rotation.x = 0.12 + Math.max(0, -swing) * 1.0;
+    v.elbowL.rotation.x = 0.15 + Math.max(0, -swing) * 0.55;
+    v.elbowR.rotation.x = 0.15 + Math.max(0, swing) * 0.55;
     // A faint idle breathing bob when standing still, so the hunter never reads as a frozen prop
     // between fights — walking already has its own motion via the leg/arm swing above.
     v.headGroup.position.y = v.headBaseY + (player._isMoving ? 0 : Math.sin(time * 1.7) * 0.6);
@@ -939,6 +1016,12 @@ class Renderer3D {
         v.hipR.rotation.x = -swing * 0.7;
         v.shoulderL.rotation.x = -swing * 0.5;
         v.shoulderR.rotation.x = swing * 0.5;
+        // Knees/elbows fold as their limb swings forward, same approach as the hunter — see
+        // syncPlayer for why only the forward half of the swing bends the joint.
+        v.kneeL.rotation.x = 0.12 + Math.max(0, swing) * 1.0;
+        v.kneeR.rotation.x = 0.12 + Math.max(0, -swing) * 1.0;
+        v.elbowL.rotation.x = 0.15 + Math.max(0, -swing) * 0.55;
+        v.elbowR.rotation.x = 0.15 + Math.max(0, swing) * 0.55;
         v.headGroup.position.y = v.headBaseY;
       } else {
         // Standing at contact range: legs planted, arms swing in a short strike-and-recover
@@ -947,10 +1030,14 @@ class Renderer3D {
         // reading as frozen in the gaps between strikes.
         v.hipL.rotation.x = 0;
         v.hipR.rotation.x = 0;
+        v.kneeL.rotation.x = 0.12;
+        v.kneeR.rotation.x = 0.12;
         const sinceAttack = ENEMY_ATTACK_INTERVAL - e._attackCooldown;
         const lunge = sinceAttack >= 0 && sinceAttack < 0.3 ? Math.sin((sinceAttack / 0.3) * Math.PI) : 0;
         v.shoulderL.rotation.x = -lunge * 0.7;
         v.shoulderR.rotation.x = lunge * 0.7;
+        v.elbowL.rotation.x = 0.15 + lunge * 0.4;
+        v.elbowR.rotation.x = 0.15 + lunge * 0.4;
         v.headGroup.position.y = v.headBaseY + Math.sin(time * 1.9 + e.x * 0.05) * 0.5;
       }
       const flash = e._hitFlash > 0 ? clamp(e._hitFlash / 0.08, 0, 1) : 0;
