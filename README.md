@@ -66,6 +66,11 @@ Desktop fallback (used automatically until the page detects a touch):
   no rendering code
 - `src/waves.js` — `WaveManager`, which builds and paces enemy spawns per wave
 - `src/shop.js` — the stat-upgrade catalog and purchase logic
+- `src/audio.js` — `AudioManager`, every sound effect in the game
+  synthesized on the fly via the Web Audio API (oscillators/noise bursts
+  through gain and filter envelopes) — no audio files, same "no external
+  runtime dependency" reasoning that got Three.js vendored instead of
+  loaded from a CDN
 - `src/game.js` — the main update loop, viewport scaling, state machine
   (start → playing → shop → playing → ... → game over), and the render
   step that feeds live entity state into `Renderer3D` each frame and draws
@@ -234,6 +239,17 @@ None of that is done yet; this repo is still the pure web build.
 - Enemy hitboxes are somewhat larger than their visible silhouette
   (`Enemy.hitRadius`, entities.js) so landing a shot doesn't demand
   pixel-precise aim
+- Full sound: weapon-specific gunshots, footsteps, hit/crit impacts,
+  enemy deaths, player/ward damage, mine detonations, gold and
+  purchase chimes, menu/button blips, a wave-start horn and a
+  wave-clear fanfare, a game-over sting, and occasional per-species
+  monster voices (zombie groan, vampire hiss, werewolf growl) while
+  they're alive on the field. Every sound is synthesized live rather
+  than an audio file (see `src/audio.js`), so there's nothing to
+  download and no licensing to worry about. A mute button sits next to
+  Pause; the AudioContext itself only starts on the player's first
+  real click/tap (Start/Continue/Resume), since browsers block audio
+  before a user gesture
 
 ## A note on the 3D rendering
 

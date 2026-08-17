@@ -17,6 +17,7 @@
   fx.scale(dpr, dpr);
 
   const renderer3d = new Renderer3D(canvas, bounds, dpr);
+  const audio = new AudioManager();
 
   // ---------- Responsive fit ----------
   // The canvas keeps a fixed logical resolution; only its CSS size changes so it
@@ -52,6 +53,7 @@
     startBtn: document.getElementById('start-btn'),
     continueBtn: document.getElementById('continue-btn'),
     pauseBtn: document.getElementById('pause-btn'),
+    muteBtn: document.getElementById('mute-btn'),
     pauseOverlay: document.getElementById('pause-overlay'),
     resumeBtn: document.getElementById('resume-btn'),
     saveQuitBtn: document.getElementById('save-quit-btn'),
@@ -97,6 +99,13 @@
     el.pauseBtn.classList.toggle('hidden', !visible);
     el.weaponSwitchBtn.classList.toggle('hidden', !visible);
   }
+
+  el.muteBtn.addEventListener('click', () => {
+    audio.unlock(); // in case this is literally the player's first interaction with the page
+    const muted = audio.toggleMuted();
+    el.muteBtn.textContent = muted ? '\u{1F507}' : '\u{1F50A}';
+    el.muteBtn.classList.toggle('muted', muted);
+  });
 
   function resetGame() {
     player = new Player(bounds.width / 2, bounds.height / 2 + 120);
@@ -159,6 +168,7 @@
   }
 
   el.viewFieldBtn.addEventListener('click', () => {
+    audio.menuClose();
     shopHidden = true;
     el.shopOverlay.classList.add('hidden');
     el.reopenShopBtn.classList.remove('hidden');
@@ -167,6 +177,7 @@
   });
 
   el.reopenShopBtn.addEventListener('click', () => {
+    audio.menuOpen();
     shopHidden = false;
     hideDefenseSelection();
     el.shopOverlay.classList.remove('hidden');
@@ -233,6 +244,7 @@
     btn.disabled = btn.disabled || gold < cost;
     btn.addEventListener('click', () => {
       if (gold < cost || maxed) return;
+      audio.purchase();
       gold -= cost;
       onBuy();
       updateHud();
@@ -264,6 +276,7 @@
 
   el.placementRotateBtn.addEventListener('click', () => {
     if (!placementMode || placementMode.kind !== 'fence') return;
+    audio.buttonClick();
     placementMode.rotation = (placementMode.rotation + ROTATE_STEP) % (Math.PI * 2);
   });
 
@@ -283,6 +296,7 @@
 
   el.placementCancelBtn.addEventListener('click', () => {
     if (!placementMode) return;
+    audio.buttonClick();
     if (!placementMode.moving) {
       const tiers = placementMode.kind === 'fence' ? FENCE_TIERS : MINE_TIERS;
       gold += tiers[placementMode.tierIndex].cost; // refund — it was paid up front
@@ -324,6 +338,7 @@
       return;
     }
     const { kind, tierIndex, moving, rotation } = placementMode;
+    audio.buttonClick();
     if (moving) {
       moving.x = p.x;
       moving.y = p.y;
@@ -391,12 +406,14 @@
 
   el.defenseSelectMoveBtn.addEventListener('click', () => {
     if (!selectedDefense) return;
+    audio.buttonClick();
     const { kind, ref } = selectedDefense;
     beginPlacement(kind, ref.tierIndex, ref);
   });
 
   el.defenseSelectRotateBtn.addEventListener('click', () => {
     if (!selectedDefense || selectedDefense.kind !== 'fence') return;
+    audio.buttonClick();
     const { ref } = selectedDefense;
     ref.rotation = (ref.rotation + ROTATE_STEP) % (Math.PI * 2);
   });
@@ -409,6 +426,7 @@
     if (unlockedTierIndex <= ref.tierIndex) return;
     const nextTier = tiers[unlockedTierIndex];
     if (gold < nextTier.cost) return;
+    audio.purchase();
     gold -= nextTier.cost;
     ref.tierIndex = unlockedTierIndex;
     if (kind === 'fence') {
@@ -425,7 +443,7 @@
     selectDefense(kind, ref); // refresh the bar (now shows the new tier, or hides Upgrade if maxed)
   });
 
-  el.defenseSelectCloseBtn.addEventListener('click', hideDefenseSelection);
+  el.defenseSelectCloseBtn.addEventListener('click', () => { audio.buttonClick(); hideDefenseSelection(); });
 
   canvas.addEventListener('pointerdown', (e) => {
     if (placementMode) {
@@ -470,8 +488,11 @@
         if (equipped) return;
         if (!owned) {
           if (gold < weapon.unlockCost) return;
+          audio.purchase();
           gold -= weapon.unlockCost;
           player.unlockedWeapons.push(id);
+        } else {
+          audio.buttonClick();
         }
         player.equippedWeapon = id;
         updateHud();
@@ -512,6 +533,7 @@
       btn.disabled = btn.disabled || !shop.canBuy(item, gold);
       btn.addEventListener('click', () => {
         if (!shop.canBuy(item, gold)) return;
+        audio.purchase();
         gold -= shop.costFor(item);
         shop.buy(item, player, base);
         updateHud();
@@ -524,6 +546,7 @@
   }
 
   function startNextWave() {
+    audio.waveStart();
     el.shopOverlay.classList.add('hidden');
     state = 'playing';
     waveManager.startNextWave();
@@ -533,6 +556,8 @@
   el.nextWaveBtn.addEventListener('click', startNextWave);
 
   el.restartBtn.addEventListener('click', () => {
+    audio.unlock();
+    audio.buttonClick();
     el.gameoverOverlay.classList.add('hidden');
     clearSave();
     resetGame();
@@ -540,7 +565,9 @@
   });
 
   el.startBtn.addEventListener('click', () => {
+    audio.unlock(); // first real user gesture on the page — safe place to start the AudioContext
     if (loadGame() && !confirm('Start a new game? Your saved progress will be lost.')) return;
+    audio.menuClose();
     clearSave();
     el.startOverlay.classList.add('hidden');
     resetGame();
@@ -548,8 +575,10 @@
   });
 
   el.continueBtn.addEventListener('click', () => {
+    audio.unlock();
     const snapshot = loadGame();
     if (!snapshot) return;
+    audio.menuClose();
     el.startOverlay.classList.add('hidden');
     applySnapshot(snapshot);
   });
@@ -561,22 +590,27 @@
   }
 
   el.weaponSwitchBtn.addEventListener('click', () => {
+    audio.buttonClick();
     player.swapWeapon();
     updateHud();
   });
 
   // ---------- Pause / save / quit ----------
   el.pauseBtn.addEventListener('click', () => {
+    audio.menuOpen();
     paused = true;
     el.pauseOverlay.classList.remove('hidden');
   });
 
   el.resumeBtn.addEventListener('click', () => {
+    audio.unlock(); // in case the tab was backgrounded long enough to suspend the AudioContext
+    audio.menuClose();
     paused = false;
     el.pauseOverlay.classList.add('hidden');
   });
 
   el.saveQuitBtn.addEventListener('click', () => {
+    audio.buttonClick();
     saveGame(buildSnapshot());
     el.pauseOverlay.classList.add('hidden');
     el.shopOverlay.classList.add('hidden');
@@ -752,17 +786,26 @@
     const playerScreen = renderer3d.worldToScreen(player.x, player.y, 20);
     const control = input.getControlState(playerScreen.x, playerScreen.y, player.aimAngle);
     player.update(dt, control, bounds);
+    if (player._isMoving) audio.footstep();
     if (control.firing) {
-      bullets.push(...player.tryFire());
+      const fired = player.tryFire();
+      if (fired.length) audio.shootWeapon(player.equippedWeapon);
+      bullets.push(...fired);
     }
 
     for (const b of bullets) b.update(dt, bounds);
     bullets = bullets.filter((b) => b.alive);
 
     const spawned = waveManager.update(dt, enemies.length);
-    if (spawned) enemies.push(spawned);
+    if (spawned) {
+      enemies.push(spawned);
+      audio.monsterVoice(spawned.typeKey);
+    }
 
     for (const enemy of enemies) {
+      // A rare, rate-limited ambient growl/hiss/groan while a monster is alive and on the field —
+      // AudioManager's per-type cooldown keeps a whole wave of them from turning into noise.
+      if (Math.random() < 0.0025) audio.monsterVoice(enemy.typeKey);
       // Each enemy heads for a target it was assigned at spawn (see Enemy.targetPreference) —
       // some hunt the player, some siege the ward — so both are under real, simultaneous
       // pressure instead of the whole wave always dogpiling onto whichever is a step closer.
@@ -792,12 +835,14 @@
       if (dist(enemy.x, enemy.y, base.x, base.y) <= base.radius + enemy.radius) {
         if (enemy._attackCooldown <= 0) {
           base.takeDamage(enemy.damage);
+          audio.baseHit();
           enemy._attackCooldown = ENEMY_ATTACK_INTERVAL;
           damageFlash = Math.min(1, damageFlash + 0.35);
         }
       } else if (dist(enemy.x, enemy.y, player.x, player.y) <= player.radius + enemy.radius) {
         if (enemy._attackCooldown <= 0) {
           player.takeDamage(enemy.damage);
+          audio.playerHurt();
           enemy._attackCooldown = ENEMY_ATTACK_INTERVAL;
           damageFlash = Math.min(1, damageFlash + 0.5);
         }
@@ -814,12 +859,15 @@
         if (dist(mine.x, mine.y, enemy.x, enemy.y) <= mine.triggerRadius + enemy.radius) {
           mine.alive = false;
           explosions.push(new Explosion(mine.x, mine.y, mine.blastRadius));
+          audio.mineExplosion();
           for (const victim of enemies) {
             if (!victim.alive) continue;
             if (dist(mine.x, mine.y, victim.x, victim.y) <= mine.blastRadius) {
               victim.takeDamage(mine.damage);
               if (!victim.alive) {
+                audio.enemyDeath();
                 gold += victim.reward;
+                audio.goldPickup();
                 bloodPools.push(new BloodPool(victim.x, victim.y, victim.radius / 12));
               }
             }
@@ -848,8 +896,12 @@
           const hitHeight = enemy.radius * 1.45;
           hitEffects.push(new HitSpark(enemy.x, enemy.y, hitHeight, hitAngle, bullet.isCrit));
           hitEffects.push(new DamageNumber(enemy.x, enemy.y, hitHeight, bullet.damage, bullet.isCrit));
-          if (!enemy.alive) {
+          if (enemy.alive) {
+            audio.hitEnemy(bullet.isCrit);
+          } else {
+            audio.enemyDeath();
             gold += enemy.reward;
+            audio.goldPickup();
             bloodPools.push(new BloodPool(enemy.x, enemy.y, enemy.radius / 12));
           }
           if (bullet.pierceRemaining > 0) {
@@ -865,6 +917,7 @@
     enemies = enemies.filter((e) => e.alive);
 
     if (base.isDestroyed) {
+      audio.gameOver();
       state = 'gameover';
       el.finalWave.textContent = waveManager.waveNumber;
       el.gameoverOverlay.classList.remove('hidden');
@@ -893,6 +946,7 @@
         openShop(false);
       }
     } else if (waveManager.isWaveCleared(enemies.length)) {
+      audio.waveClear();
       gold += 10 + waveManager.waveNumber * 2; // wave-clear bonus, on top of per-kill gold
       waveClearTimer = WAVE_CLEAR_DELAY;
       el.waveClearBanner.classList.remove('hidden');
@@ -1203,5 +1257,6 @@
     debugRotateSelected: () => el.defenseSelectRotateBtn.click(),
     debugRotatePlacement: () => el.placementRotateBtn.click(),
     debugWorldToScreen: (x, y, height = 0) => renderer3d.worldToScreen(x, y, height),
+    debugAudioState: () => ({ ctxState: audio.ctx ? audio.ctx.state : 'not created', muted: audio.muted }),
   };
 })();
