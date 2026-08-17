@@ -1083,6 +1083,45 @@ class Renderer3D {
   }
 
   // ---------- Per-frame sync: reconcile live entity arrays against cached view Maps ----------
+  /** Applies the walk-cycle limb swing, blended across the body's local fore-aft (Z) and sideways
+   *  (X) axes by `relativeAngle` — the direction of actual travel relative to whichever way the
+   *  body is *facing*. relativeAngle=0 is a straight walk (pure Z), ±90° is a pure sideways
+   *  strafe (pure X), 180° is backpedaling. Every enemy always has relativeAngle=0 (Enemy.angle
+   *  *is* its movement direction — there's nothing else it could be facing). The hunter is the one
+   *  case where facing (aimAngle, twin-stick convention: the gun points where shots go) and actual
+   *  movement (an independent stick/key input — strafing while aiming elsewhere is completely
+   *  normal play, not an edge case) routinely differ, and without this blend the legs would always
+   *  swing fore-aft relative to the gun regardless of which way the hunter is actually sliding
+   *  across the ground. */
+  _applyStrideSwing(v, swing, relativeAngle, kneeBase = 0.12, elbowBase = 0.15) {
+    const fwd = Math.cos(relativeAngle);
+    const side = Math.sin(relativeAngle);
+    v.hipL.rotation.z = swing * 0.7 * fwd;
+    v.hipR.rotation.z = -swing * 0.7 * fwd;
+    v.hipL.rotation.x = swing * 0.7 * side;
+    v.hipR.rotation.x = -swing * 0.7 * side;
+    v.shoulderL.rotation.z = -swing * 0.5 * fwd;
+    v.shoulderR.rotation.z = swing * 0.5 * fwd;
+    v.shoulderL.rotation.x = -swing * 0.5 * side;
+    v.shoulderR.rotation.x = swing * 0.5 * side;
+    // Knees/elbows bend as their limb swings forward through the stride (never backward — real
+    // joints only fold one way), on top of a small standing bend so legs never look locked
+    // straight. This is what makes the walk read as a jointed stride instead of two stiff
+    // pendulums, on whichever axis the stride itself is currently blended onto.
+    const kneeSwingL = Math.max(0, swing);
+    const kneeSwingR = Math.max(0, -swing);
+    v.kneeL.rotation.z = kneeBase + kneeSwingL * 1.0 * fwd;
+    v.kneeR.rotation.z = kneeBase + kneeSwingR * 1.0 * fwd;
+    v.kneeL.rotation.x = kneeSwingL * 1.0 * side;
+    v.kneeR.rotation.x = kneeSwingR * 1.0 * side;
+    const elbowSwingL = Math.max(0, -swing);
+    const elbowSwingR = Math.max(0, swing);
+    v.elbowL.rotation.z = elbowBase + elbowSwingL * 0.55 * fwd;
+    v.elbowR.rotation.z = elbowBase + elbowSwingR * 0.55 * fwd;
+    v.elbowL.rotation.x = elbowSwingL * 0.55 * side;
+    v.elbowR.rotation.x = elbowSwingR * 0.55 * side;
+  }
+
   syncPlayer(player, time = 0) {
     if (!this.playerView) {
       this.playerView = this.buildPlayerModel();
@@ -1092,17 +1131,8 @@ class Renderer3D {
     v.group.position.set(this.worldX(player.x), 0, this.worldZ(player.y));
     v.group.rotation.y = this.yawFromAngle(player.aimAngle);
     const swing = player._isMoving ? Math.sin(player._walkPhase) : 0;
-    v.hipL.rotation.z = swing * 0.7;
-    v.hipR.rotation.z = -swing * 0.7;
-    v.shoulderL.rotation.z = -swing * 0.5;
-    v.shoulderR.rotation.z = swing * 0.5;
-    // Knees/elbows bend as their limb swings forward (never backward — real joints only fold one
-    // way), plus a small standing bend so legs never look locked straight. This is what makes the
-    // walk read as a jointed stride instead of two stiff pendulums.
-    v.kneeL.rotation.z = 0.12 + Math.max(0, swing) * 1.0;
-    v.kneeR.rotation.z = 0.12 + Math.max(0, -swing) * 1.0;
-    v.elbowL.rotation.z = 0.15 + Math.max(0, -swing) * 0.55;
-    v.elbowR.rotation.z = 0.15 + Math.max(0, swing) * 0.55;
+    const relativeAngle = player._isMoving ? player._moveAngle - player.aimAngle : 0;
+    this._applyStrideSwing(v, swing, relativeAngle);
     // A faint idle breathing bob when standing still, so the hunter never reads as a frozen prop
     // between fights — walking already has its own motion via the leg/arm swing above.
     v.headGroup.position.y = v.headBaseY + (player._isMoving ? 0 : Math.sin(time * 1.7) * 0.6);
@@ -1130,21 +1160,15 @@ class Renderer3D {
       // werewolf carry a crouched, ready-to-pounce bend even before either one moves.
       const kneeBase = e.typeKey === 'vampire' ? 0.04 : e.typeKey === 'werewolf' ? 0.24 : 0.12;
       const zombieReach = e.typeKey === 'zombie' ? 0.4 : 0;
-      v.shoulderL.rotation.x = zombieReach;
-      v.shoulderR.rotation.x = -zombieReach;
 
       if (e._isMoving) {
+        // An enemy's angle IS its movement direction (see Enemy.update()'s atan2) — unlike the
+        // hunter, there's no independent aim to diverge from, so the stride is always purely
+        // fore-aft (relativeAngle 0). See _applyStrideSwing for the general case.
         const swing = Math.sin(e._walkPhase);
-        v.hipL.rotation.z = swing * 0.7;
-        v.hipR.rotation.z = -swing * 0.7;
-        v.shoulderL.rotation.z = -swing * 0.5;
-        v.shoulderR.rotation.z = swing * 0.5;
-        // Knees/elbows fold as their limb swings forward, same approach as the hunter — see
-        // syncPlayer for why only the forward half of the swing bends the joint.
-        v.kneeL.rotation.z = kneeBase + Math.max(0, swing) * 1.0;
-        v.kneeR.rotation.z = kneeBase + Math.max(0, -swing) * 1.0;
-        v.elbowL.rotation.z = 0.15 + Math.max(0, -swing) * 0.55;
-        v.elbowR.rotation.z = 0.15 + Math.max(0, swing) * 0.55;
+        this._applyStrideSwing(v, swing, 0, kneeBase);
+        v.shoulderL.rotation.x += zombieReach;
+        v.shoulderR.rotation.x -= zombieReach;
         v.headGroup.position.y = v.headBaseY;
       } else {
         // Standing at contact range: legs planted, arms swing in a short strike-and-recover
@@ -1153,14 +1177,22 @@ class Renderer3D {
         // reading as frozen in the gaps between strikes.
         v.hipL.rotation.z = 0;
         v.hipR.rotation.z = 0;
+        v.hipL.rotation.x = 0;
+        v.hipR.rotation.x = 0;
         v.kneeL.rotation.z = kneeBase;
         v.kneeR.rotation.z = kneeBase;
+        v.kneeL.rotation.x = 0;
+        v.kneeR.rotation.x = 0;
         const sinceAttack = ENEMY_ATTACK_INTERVAL - e._attackCooldown;
         const lunge = sinceAttack >= 0 && sinceAttack < 0.3 ? Math.sin((sinceAttack / 0.3) * Math.PI) : 0;
         v.shoulderL.rotation.z = -lunge * 0.7;
         v.shoulderR.rotation.z = lunge * 0.7;
+        v.shoulderL.rotation.x = zombieReach;
+        v.shoulderR.rotation.x = -zombieReach;
         v.elbowL.rotation.z = 0.15 + lunge * 0.4;
         v.elbowR.rotation.z = 0.15 + lunge * 0.4;
+        v.elbowL.rotation.x = 0;
+        v.elbowR.rotation.x = 0;
         v.headGroup.position.y = v.headBaseY + Math.sin(time * 1.9 + e.x * 0.05) * 0.5;
       }
       const flash = e._hitFlash > 0 ? clamp(e._hitFlash / 0.08, 0, 1) : 0;

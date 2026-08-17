@@ -53,6 +53,7 @@ class Player {
     this._fireCooldown = 0;
     this._walkPhase = 0;
     this._isMoving = false;
+    this._moveAngle = 0;
   }
 
   /** World-space position of the weapon's muzzle — where bullets actually spawn. */
@@ -89,6 +90,12 @@ class Player {
 
     this._isMoving = control.moveMag > 0.05;
     this._walkPhase += moveSpeed * dt * 0.045;
+    // The body always faces aimAngle (twin-stick convention — the weapon has to point where shots
+    // actually go), but movement is a fully independent stick/key input: strafing or backpedaling
+    // while aiming elsewhere is the normal way this game is played, not an edge case. Renderer3D
+    // needs this to angle the leg/arm swing at the real direction of travel relative to that
+    // facing, instead of always swinging fore-and-aft as if movement and aim were the same thing.
+    if (this._isMoving) this._moveAngle = Math.atan2(control.moveY, control.moveX);
 
     this.aimAngle = control.aimAngle;
 

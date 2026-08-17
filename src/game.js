@@ -1258,5 +1258,16 @@
     debugRotatePlacement: () => el.placementRotateBtn.click(),
     debugWorldToScreen: (x, y, height = 0) => renderer3d.worldToScreen(x, y, height),
     debugAudioState: () => ({ ctxState: audio.ctx ? audio.ctx.state : 'not created', muted: audio.muted }),
+    debugPlayerLimbState: () => {
+      const v = renderer3d.playerView;
+      if (!v) return null;
+      return {
+        aimAngle: player.aimAngle,
+        moveAngle: player._moveAngle,
+        isMoving: player._isMoving,
+        hipL: { x: v.hipL.rotation.x, z: v.hipL.rotation.z },
+        hipR: { x: v.hipR.rotation.x, z: v.hipR.rotation.z },
+      };
+    },
   };
 })();
