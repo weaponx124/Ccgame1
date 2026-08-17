@@ -52,6 +52,7 @@ class Renderer3D {
     this._buildLighting();
     this._buildGround();
     this._buildEnvironment();
+    this._buildFogWisps();
 
     this.playerView = null;
     this.enemyViews = new Map();
@@ -367,17 +368,100 @@ class Renderer3D {
     light.position.set(0, 26, 0);
     group.add(light);
 
+    const flameGlow = this._makeGlowSprite(0xffa040, 30, 0.85);
+    flameGlow.position.set(0, 30, 0);
+    group.add(flameGlow);
+
+    // A handful of embers drifting up out of the bowl and guttering out — cheap per-sprite
+    // animation (no particle buffer geometry needed at this count) that keeps a brazier reading
+    // as a real fire instead of a static glowing cone.
+    const embers = [];
+    for (let i = 0; i < 7; i++) {
+      const sprite = this._makeGlowSprite(0xff7028, 2.6 + Math.random() * 1.6, 0.8);
+      group.add(sprite);
+      embers.push({
+        sprite,
+        angle: Math.random() * Math.PI * 2,
+        radius: 3 + Math.random() * 6,
+        swaySpeed: 0.5 + Math.random() * 0.7,
+        riseSpeed: 8 + Math.random() * 7,
+        phase: Math.random() * 10,
+      });
+    }
+
     group.position.set(this.worldX(x), 0, this.worldZ(y));
     this.scene.add(group);
-    this.brazierLights.push({ light, flame, baseX: x });
+    this.brazierLights.push({ light, flame, flameGlow, embers, baseX: x });
+  }
+
+  /** Soft radial-alpha blob used for the drifting ground-fog wisps below. */
+  _bakeWispTexture() {
+    if (Renderer3D._wispTexCache) return Renderer3D._wispTexCache;
+    const size = 256;
+    const c = document.createElement('canvas');
+    c.width = size; c.height = size;
+    const g = c.getContext('2d');
+    const grad = g.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+    grad.addColorStop(0, 'rgba(184,190,200,0.55)');
+    grad.addColorStop(0.5, 'rgba(184,190,200,0.22)');
+    grad.addColorStop(1, 'rgba(184,190,200,0)');
+    g.fillStyle = grad;
+    g.fillRect(0, 0, size, size);
+    Renderer3D._wispTexCache = new THREE.CanvasTexture(c);
+    return Renderer3D._wispTexCache;
+  }
+
+  /** A handful of low, slow-drifting ground-mist patches wandering around fixed points across the
+   *  arena — cheap atmosphere (flat alpha-blended planes, no particle system) that makes the
+   *  graveyard feel like it's breathing instead of a static backdrop. */
+  _buildFogWisps() {
+    const tex = this._bakeWispTexture();
+    const wisps = [];
+    for (let i = 0; i < 5; i++) {
+      const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, side: THREE.DoubleSide });
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mat);
+      mesh.rotation.x = -Math.PI / 2;
+      const w = 220 + Math.random() * 160;
+      mesh.scale.set(w, w * 0.6, 1);
+      this.scene.add(mesh);
+      wisps.push({
+        mesh,
+        baseX: this.worldX(80 + Math.random() * (this.bounds.width - 160)),
+        baseZ: this.worldZ(80 + Math.random() * (this.bounds.height - 160)),
+        driftRadius: 40 + Math.random() * 60,
+        driftSpeed: 0.04 + Math.random() * 0.04,
+        baseOpacity: 0.09 + Math.random() * 0.08,
+        phase: Math.random() * Math.PI * 2,
+      });
+    }
+    this.fogWisps = wisps;
   }
 
   tickEnvironment(time) {
+    for (const w of this.fogWisps) {
+      w.mesh.position.set(
+        w.baseX + Math.cos(time * w.driftSpeed + w.phase) * w.driftRadius,
+        6,
+        w.baseZ + Math.sin(time * w.driftSpeed * 0.7 + w.phase) * w.driftRadius * 0.6
+      );
+      w.mesh.material.opacity = w.baseOpacity + 0.04 * Math.sin(time * 0.25 + w.phase);
+    }
     for (const b of this.brazierLights) {
       const flicker = 0.75 + 0.25 * Math.sin(time * 9 + b.baseX) + 0.12 * Math.sin(time * 23 + b.baseX * 1.7);
       b.light.intensity = 55 * flicker;
       b.flame.scale.y = 0.8 + flicker * 0.35;
       b.flame.position.y = 26 + b.flame.scale.y * 8;
+      b.flameGlow.scale.setScalar(26 * (0.85 + flicker * 0.3));
+      b.flameGlow.material.opacity = 0.6 + flicker * 0.3;
+
+      for (const e of b.embers) {
+        const cycle = 10 / e.riseSpeed * 3; // seconds per ember before it loops back into the fire
+        const t = ((time + e.phase) % cycle) / cycle;
+        const y = 24 + t * 42;
+        const wobble = Math.sin(time * e.swaySpeed * 4 + e.phase) * (2 + t * 3);
+        e.sprite.position.set(Math.cos(e.angle) * e.radius + wobble, y, Math.sin(e.angle) * e.radius);
+        e.sprite.material.opacity = (1 - t) * 0.75;
+      }
     }
   }
 
@@ -392,6 +476,42 @@ class Renderer3D {
       capsule: new THREE.CapsuleGeometry(1, 1, 4, 8),
     };
     return Renderer3D._sharedGeo;
+  }
+
+  /** Soft white radial-gradient texture, shared by every glow sprite (tinted per-use via the
+   *  sprite material's own `color`) so there's exactly one small canvas bake for the whole scene
+   *  instead of one per light source. */
+  static _glowTex() {
+    if (Renderer3D._glowTexCache) return Renderer3D._glowTexCache;
+    const size = 64;
+    const c = document.createElement('canvas');
+    c.width = size; c.height = size;
+    const g = c.getContext('2d');
+    const grad = g.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+    grad.addColorStop(0, 'rgba(255,255,255,1)');
+    grad.addColorStop(0.35, 'rgba(255,255,255,0.55)');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = grad;
+    g.fillRect(0, 0, size, size);
+    Renderer3D._glowTexCache = new THREE.CanvasTexture(c);
+    return Renderer3D._glowTexCache;
+  }
+
+  /** A camera-facing, unlit additive-blended glow billboard — the cheap way to make eyes, mine
+   *  cores, and flames actually read as glowing instead of relying on the (much subtler) emissive
+   *  material shading alone. `size` is the sprite's world-unit diameter. */
+  _makeGlowSprite(color, size, opacity = 1) {
+    const mat = new THREE.SpriteMaterial({
+      map: Renderer3D._glowTex(),
+      color,
+      opacity,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      transparent: true,
+    });
+    const sprite = new THREE.Sprite(mat);
+    sprite.scale.setScalar(size);
+    return sprite;
   }
 
   /** A capsule "bone" hanging down -length from its pivot (local origin), radius r, color. Unit
@@ -451,9 +571,19 @@ class Renderer3D {
     eye.position.set(headRadius * 0.65, headRadius * 0.05, headRadius * 0.6);
     headGroup.add(eye);
 
+    // A small additive glow riding on the eye — the emissive material alone reads as barely more
+    // than a bright dot; this is what actually makes it look like it's glowing in the dark.
+    const eyeGlow = this._makeGlowSprite(eyeColor, headRadius * 0.85, 0.9);
+    eyeGlow.position.copy(eye.position);
+    headGroup.add(eyeGlow);
+
     group.add(headGroup);
 
-    return { group, hipL, hipR, shoulderL, shoulderR, torso, torsoMat, head, headMat, headGroup, eye, eyeMat, legLen, torsoLen, headRadius, torsoRadius };
+    // Idle "breathing" bob (see syncPlayer/syncEnemies) offsets headGroup.position.y each frame
+    // relative to this rest height, so a standing-still character never looks perfectly frozen.
+    const headBaseY = headGroup.position.y;
+
+    return { group, hipL, hipR, shoulderL, shoulderR, torso, torsoMat, head, headMat, headGroup, headBaseY, eye, eyeMat, eyeGlow, legLen, torsoLen, headRadius, torsoRadius };
   }
 
   buildPlayerModel() {
@@ -486,6 +616,9 @@ class Renderer3D {
     tip.scale.setScalar(1.8);
     tip.position.x = muzzleReach;
     weaponPivot.add(tip);
+    const tipGlow = this._makeGlowSprite(0xf0d98c, 10, 0.85);
+    tipGlow.position.copy(tip.position);
+    weaponPivot.add(tipGlow);
     rig.group.add(weaponPivot);
 
     return { ...rig, cloak, weaponPivot };
@@ -612,7 +745,11 @@ class Renderer3D {
     glowLight.position.copy(glow.position);
     group.add(glowLight);
 
-    return { group, glow, glowMat, glowLight };
+    const coreGlow = this._makeGlowSprite(0x9628c3, radius * 0.9, 0.85);
+    coreGlow.position.copy(glow.position);
+    group.add(coreGlow);
+
+    return { group, glow, glowMat, glowLight, coreGlow };
   }
 
   buildFenceModel(tierIndex) {
@@ -660,6 +797,9 @@ class Renderer3D {
     glow.scale.set(5.5, 0.8, 5.5);
     glow.position.y = 4.3;
     group.add(glow);
+    const coreGlow = this._makeGlowSprite(color, 14, 0.85);
+    coreGlow.position.y = 5;
+    group.add(coreGlow);
     // A faint ring on the ground marking the trigger radius, so its (now bigger) activation
     // range actually reads instead of being an invisible number.
     const ringMat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.28, side: THREE.DoubleSide, depthWrite: false });
@@ -670,7 +810,7 @@ class Renderer3D {
     const light = new THREE.PointLight(color, 20, 110, 1.5);
     light.position.y = 6;
     group.add(light);
-    return { group, glow, glowMat, light, ringMat };
+    return { group, glow, glowMat, coreGlow, light, ringMat };
   }
 
   buildExplosionModel(maxRadius) {
@@ -759,7 +899,7 @@ class Renderer3D {
   }
 
   // ---------- Per-frame sync: reconcile live entity arrays against cached view Maps ----------
-  syncPlayer(player) {
+  syncPlayer(player, time = 0) {
     if (!this.playerView) {
       this.playerView = this.buildPlayerModel();
       this.scene.add(this.playerView.group);
@@ -772,13 +912,16 @@ class Renderer3D {
     v.hipR.rotation.x = -swing * 0.7;
     v.shoulderL.rotation.x = -swing * 0.5;
     v.shoulderR.rotation.x = swing * 0.5;
+    // A faint idle breathing bob when standing still, so the hunter never reads as a frozen prop
+    // between fights — walking already has its own motion via the leg/arm swing above.
+    v.headGroup.position.y = v.headBaseY + (player._isMoving ? 0 : Math.sin(time * 1.7) * 0.6);
   }
 
   setPlayerVisible(visible) {
     if (this.playerView) this.playerView.group.visible = visible;
   }
 
-  syncEnemies(enemies) {
+  syncEnemies(enemies, time = 0) {
     const seen = new Set();
     for (const e of enemies) {
       seen.add(e);
@@ -796,16 +939,19 @@ class Renderer3D {
         v.hipR.rotation.x = -swing * 0.7;
         v.shoulderL.rotation.x = -swing * 0.5;
         v.shoulderR.rotation.x = swing * 0.5;
+        v.headGroup.position.y = v.headBaseY;
       } else {
         // Standing at contact range: legs planted, arms swing in a short strike-and-recover
         // roughly timed to when the next hit actually lands (ENEMY_ATTACK_INTERVAL, entities.js)
-        // instead of idling motionless between hits.
+        // instead of idling motionless between hits. A faint breathing bob on top keeps it from
+        // reading as frozen in the gaps between strikes.
         v.hipL.rotation.x = 0;
         v.hipR.rotation.x = 0;
         const sinceAttack = ENEMY_ATTACK_INTERVAL - e._attackCooldown;
         const lunge = sinceAttack >= 0 && sinceAttack < 0.3 ? Math.sin((sinceAttack / 0.3) * Math.PI) : 0;
         v.shoulderL.rotation.x = -lunge * 0.7;
         v.shoulderR.rotation.x = lunge * 0.7;
+        v.headGroup.position.y = v.headBaseY + Math.sin(time * 1.9 + e.x * 0.05) * 0.5;
       }
       const flash = e._hitFlash > 0 ? clamp(e._hitFlash / 0.08, 0, 1) : 0;
       v.headMat.emissiveIntensity = flash * 2.2;
@@ -885,6 +1031,8 @@ class Renderer3D {
       v.glowMat.emissiveIntensity = 1 + pulse * 1.2;
       v.light.intensity = 10 + pulse * 12;
       v.ringMat.opacity = 0.16 + pulse * 0.18;
+      v.coreGlow.scale.setScalar(11 + pulse * 6);
+      v.coreGlow.material.opacity = 0.6 + pulse * 0.3;
     }
     for (const [m, v] of this.mineViews) {
       if (!seen.has(m)) {
@@ -981,6 +1129,7 @@ class Renderer3D {
     const pulse = 0.5 + 0.5 * Math.sin(time * 2);
     this.baseView.glowMat.emissiveIntensity = 1.4 + pulse * 0.8;
     this.baseView.glowLight.intensity = 40 + pulse * 22;
+    this.baseView.coreGlow.material.opacity = 0.6 + pulse * 0.3;
   }
 
   render() {

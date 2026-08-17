@@ -998,6 +998,57 @@
     fx.restore();
   }
 
+  // ---------- Post-process: cold color grade + vignette + film grain (2D overlay) ----------
+  // Drawn first on the fx-canvas, underneath every other overlay element (joysticks, damage
+  // numbers, placement UI), so it grades the 3D world without dulling the HUD/controls on top of
+  // it. Plain alpha compositing only (no canvas blend-mode tricks) since the fx-canvas and the
+  // WebGL game-canvas are two separate stacked elements — a 2D "multiply"/"overlay" composite
+  // mode only blends against pixels already drawn into *this* canvas, not the WebGL one behind
+  // it, so a translucent color wash is the correct (and correctly cheap) way to tint it.
+  const grainTile = (() => {
+    const size = 128;
+    const c = document.createElement('canvas');
+    c.width = size;
+    c.height = size;
+    const g = c.getContext('2d');
+    const img = g.createImageData(size, size);
+    for (let i = 0; i < img.data.length; i += 4) {
+      const v = Math.random() * 255;
+      img.data[i] = v;
+      img.data[i + 1] = v;
+      img.data[i + 2] = v;
+      img.data[i + 3] = 255;
+    }
+    g.putImageData(img, 0, 0);
+    return c;
+  })();
+  const grainPattern = fx.createPattern(grainTile, 'repeat');
+
+  function drawPostProcess() {
+    fx.save();
+    fx.fillStyle = 'rgba(14, 26, 36, 0.11)';
+    fx.fillRect(0, 0, bounds.width, bounds.height);
+    fx.restore();
+
+    fx.save();
+    const cx = bounds.width / 2;
+    const cy = bounds.height / 2;
+    const outerR = Math.hypot(cx, cy);
+    const grad = fx.createRadialGradient(cx, cy, outerR * 0.42, cx, cy, outerR);
+    grad.addColorStop(0, 'rgba(0,0,0,0)');
+    grad.addColorStop(1, 'rgba(0,0,0,0.6)');
+    fx.fillStyle = grad;
+    fx.fillRect(0, 0, bounds.width, bounds.height);
+    fx.restore();
+
+    fx.save();
+    fx.globalAlpha = 0.05;
+    fx.translate(-Math.random() * 128, -Math.random() * 128);
+    fx.fillStyle = grainPattern;
+    fx.fillRect(0, 0, bounds.width + 128, bounds.height + 128);
+    fx.restore();
+  }
+
   function drawDamageFlash() {
     if (damageFlash <= 0) return;
     fx.save();
@@ -1051,8 +1102,8 @@
 
   function render(dt) {
     renderer3d.setPlayerVisible(state !== 'gameover');
-    renderer3d.syncPlayer(player);
-    renderer3d.syncEnemies(enemies);
+    renderer3d.syncPlayer(player, elapsed);
+    renderer3d.syncEnemies(enemies, elapsed);
     renderer3d.syncBullets(bullets);
     renderer3d.syncFences(fences);
     renderer3d.syncMines(mines, elapsed);
@@ -1064,6 +1115,7 @@
     renderer3d.render();
 
     fx.clearRect(0, 0, bounds.width, bounds.height);
+    drawPostProcess();
     drawDamageNumbers();
     drawDefenseSelectionRing();
     drawPlacementPreview();

@@ -133,6 +133,25 @@ None of that is done yet; this repo is still the pure web build.
   rather than loaded from a CDN, so there's no external runtime dependency
 - A denser environment: dead trees, a crypt, flickering lit braziers,
   bone piles, and old blood stains alongside the tombstones
+- A cinematic horror grade on top of the 3D scene: a cold, slightly
+  desaturated color wash, a darkened vignette toward the screen edges,
+  and a faint animated film-grain texture (`drawPostProcess`, game.js) —
+  drawn as a cheap 2D overlay on the existing `fx-canvas`, not a WebGL
+  post-process pass, so it's essentially free and doesn't touch
+  gameplay visibility (center-of-screen brightness barely moves; only
+  the edges and mood darken)
+- Real glowing light sources instead of flat emissive materials: every
+  eye, the weapon's muzzle tip, mine cores, brazier flames, and the
+  ward's altar orb now carry an additive glow billboard
+  (`_makeGlowSprite`, render3d.js) so they actually read as light in the
+  dark instead of a barely-brighter dot
+- Ambient atmosphere: embers drift up and gutter out of each brazier,
+  and a handful of low ground-fog patches slowly wander the arena
+  (`_buildFogWisps`/`tickEnvironment`, render3d.js) — cheap sprite/plane
+  animation, no particle-buffer geometry
+- A faint idle breathing bob on the hunter and any enemy standing still
+  (not moving, not mid-attack-swing) so nothing ever looks like a frozen
+  prop between fights
 - A weapon loadout system: the crossbow (starting weapon), a blunderbuss
   (3-shard spread), and a chakram (slow, piercing throw) are purchasable
   one-time unlocks in the shop's Weapons section. Switch between owned
