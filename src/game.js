@@ -76,10 +76,6 @@
     defenseSelectCloseBtn: document.getElementById('defense-select-close-btn'),
   };
 
-  // Seconds between melee hits an enemy in contact range can land — they keep fighting until
-  // killed instead of dealing one hit and vanishing.
-  const ENEMY_ATTACK_INTERVAL = 0.8;
-
   // ---------- Game state ----------
   let state; // 'playing' | 'shop' | 'gameover' | 'menu'
   let paused = false;
@@ -741,10 +737,16 @@
     if (spawned) enemies.push(spawned);
 
     for (const enemy of enemies) {
-      // Enemies target whichever is closer: the player or the base.
+      // Each enemy heads for a target it was assigned at spawn (see Enemy.targetPreference) —
+      // some hunt the player, some siege the ward — so both are under real, simultaneous
+      // pressure instead of the whole wave always dogpiling onto whichever is a step closer.
+      // It'll still get opportunistically distracted if the *other* target is right on top of it.
       const distToPlayer = dist(enemy.x, enemy.y, player.x, player.y);
       const distToBase = dist(enemy.x, enemy.y, base.x, base.y);
-      const target = distToPlayer < distToBase ? player : base;
+      let target = enemy.targetPreference === 'base' ? base : player;
+      const preferredDist = target === base ? distToBase : distToPlayer;
+      const otherDist = target === base ? distToPlayer : distToBase;
+      if (otherDist < preferredDist * 0.5) target = target === base ? player : base;
 
       // Fences slow any enemy passing near them, and take ongoing damage from whoever is
       // in contact — enough sustained pressure breaks a segment, but a couple of stragglers
@@ -1088,7 +1090,7 @@
       paused,
       gold,
       wave: waveManager.waveNumber,
-      enemies: enemies.map((e) => ({ x: e.x, y: e.y, health: e.health, radius: e.radius, hitCenter: e.getHitCenter(), hitRadius: e.hitRadius })),
+      enemies: enemies.map((e) => ({ x: e.x, y: e.y, health: e.health, radius: e.radius, hitCenter: e.getHitCenter(), hitRadius: e.hitRadius, attackCooldown: e._attackCooldown, isMoving: e._isMoving, targetPreference: e.targetPreference })),
       bullets: bullets.map((b) => ({ x: b.x, y: b.y, vx: b.vx, vy: b.vy, radius: b.radius, pierceRemaining: b.pierceRemaining, weaponType: b.weaponType })),
       player: {
         x: player.x,

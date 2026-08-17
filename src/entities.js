@@ -149,6 +149,15 @@ class Bullet {
   }
 }
 
+// How often (seconds) an enemy in contact range lands another melee hit. Shared with
+// Renderer3D (src/render3d.js), which uses it to time the "wind up and strike" idle animation
+// so the visible swing roughly lines up with when damage actually lands.
+const ENEMY_ATTACK_INTERVAL = 0.8;
+
+// preferBaseChance: how likely a freshly spawned enemy of this type is to head for the ward
+// instead of hunting the player — see the target-selection comment on Enemy for how this plays
+// out. Zombies mostly siege the ward, vampires mostly hunt the player, werewolves are a
+// coin flip either way.
 const ENEMY_TYPES = {
   zombie: {
     radius: 12,
@@ -156,6 +165,7 @@ const ENEMY_TYPES = {
     health: 30,
     damage: 10,
     reward: 5,
+    preferBaseChance: 0.7,
   },
   vampire: {
     radius: 9,
@@ -163,6 +173,7 @@ const ENEMY_TYPES = {
     health: 16,
     damage: 6,
     reward: 6,
+    preferBaseChance: 0.25,
   },
   werewolf: {
     radius: 18,
@@ -170,6 +181,7 @@ const ENEMY_TYPES = {
     health: 110,
     damage: 22,
     reward: 15,
+    preferBaseChance: 0.5,
   },
 };
 
@@ -189,7 +201,13 @@ class Enemy {
     this.angle = 0;
     this._hitFlash = 0;
     this._walkPhase = 0;
+    this._isMoving = false;
     this._attackCooldown = 0; // seconds until it can land another melee hit on contact
+    // Fixed at spawn so a wave reliably splits its pressure between the ward and the hunter
+    // instead of every enemy always beelining for whichever happens to be a step closer right
+    // now. update() below still lets an enemy get opportunistically distracted by whichever
+    // target is currently *much* closer than its preferred one.
+    this.targetPreference = Math.random() < def.preferBaseChance ? 'base' : 'player';
   }
 
   /**
@@ -203,17 +221,29 @@ class Enemy {
   }
 
   get hitRadius() {
-    return this.radius * 1.55;
+    return this.radius * 1.8;
   }
 
-  /** speedMult lets fences (or future effects) slow an enemy for this frame without touching its base speed. */
+  /**
+   * speedMult lets fences (or future effects) slow an enemy for this frame without touching its
+   * base speed. Stops advancing once it reaches contact range of its target instead of walking
+   * through and standing inside it — target.radius (both Base and Player have one) is the edge
+   * it should stop at.
+   */
   update(dt, target, speedMult = 1) {
-    const dir = normalize(target.x - this.x, target.y - this.y);
-    this.angle = Math.atan2(dir.y, dir.x);
-    const effectiveSpeed = this.speed * speedMult;
-    this.x += dir.x * effectiveSpeed * dt;
-    this.y += dir.y * effectiveSpeed * dt;
-    this._walkPhase += effectiveSpeed * dt * 0.05;
+    const dx = target.x - this.x;
+    const dy = target.y - this.y;
+    const distToTarget = Math.hypot(dx, dy);
+    const stopDist = (target.radius || 0) + this.radius;
+    if (distToTarget > 0.001) this.angle = Math.atan2(dy, dx);
+    this._isMoving = distToTarget > stopDist;
+    if (this._isMoving) {
+      const effectiveSpeed = this.speed * speedMult;
+      const invDist = 1 / distToTarget;
+      this.x += dx * invDist * effectiveSpeed * dt;
+      this.y += dy * invDist * effectiveSpeed * dt;
+      this._walkPhase += effectiveSpeed * dt * 0.05;
+    }
     if (this._hitFlash > 0) this._hitFlash -= dt;
     if (this._attackCooldown > 0) this._attackCooldown -= dt;
   }

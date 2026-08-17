@@ -790,11 +790,23 @@ class Renderer3D {
       }
       v.group.position.set(this.worldX(e.x), 0, this.worldZ(e.y));
       v.group.rotation.y = this.yawFromAngle(e.angle);
-      const swing = Math.sin(e._walkPhase);
-      v.hipL.rotation.x = swing * 0.7;
-      v.hipR.rotation.x = -swing * 0.7;
-      v.shoulderL.rotation.x = -swing * 0.5;
-      v.shoulderR.rotation.x = swing * 0.5;
+      if (e._isMoving) {
+        const swing = Math.sin(e._walkPhase);
+        v.hipL.rotation.x = swing * 0.7;
+        v.hipR.rotation.x = -swing * 0.7;
+        v.shoulderL.rotation.x = -swing * 0.5;
+        v.shoulderR.rotation.x = swing * 0.5;
+      } else {
+        // Standing at contact range: legs planted, arms swing in a short strike-and-recover
+        // roughly timed to when the next hit actually lands (ENEMY_ATTACK_INTERVAL, entities.js)
+        // instead of idling motionless between hits.
+        v.hipL.rotation.x = 0;
+        v.hipR.rotation.x = 0;
+        const sinceAttack = ENEMY_ATTACK_INTERVAL - e._attackCooldown;
+        const lunge = sinceAttack >= 0 && sinceAttack < 0.3 ? Math.sin((sinceAttack / 0.3) * Math.PI) : 0;
+        v.shoulderL.rotation.x = -lunge * 0.7;
+        v.shoulderR.rotation.x = lunge * 0.7;
+      }
       const flash = e._hitFlash > 0 ? clamp(e._hitFlash / 0.08, 0, 1) : 0;
       v.headMat.emissiveIntensity = flash * 2.2;
       v.headMat.emissive.setScalar(flash);

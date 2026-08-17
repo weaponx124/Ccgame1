@@ -98,8 +98,16 @@ None of that is done yet; this repo is still the pure web build.
 - Six purchasable upgrades (bolt damage, fire rate, move speed, max HP,
   crit chance, ward repair)
 - Ward destroyed = game over; hunter death just costs some gold and respawns
-- Enemies in contact range keep fighting: they land a hit on a cooldown
-  (not once and gone) until the player actually kills them
+- Enemies in contact range keep fighting: they stop at the edge of the
+  ward/hunter (not walking through and standing inside it) and land a hit
+  on a cooldown, with a short strike-swing animation, until the player
+  actually kills them — they don't just touch and vanish
+- Each enemy is assigned a target when it spawns (the ward or the hunter,
+  weighted by type — zombies mostly siege the ward, vampires mostly hunt
+  the hunter, werewolves are a coin flip) so a wave puts real pressure on
+  both at once instead of every enemy always dogpiling onto whichever is
+  a step closer. It'll still get opportunistically pulled off its
+  preferred target if the other one is right on top of it
 - Each weapon fires a projectile that matches it — a fletched bolt for
   the crossbow, a stubby lead slug for the blunderbuss, a spinning ring
   for the chakram — instead of one generic shot for everything
@@ -178,6 +186,9 @@ None of that is done yet; this repo is still the pure web build.
   get an expanding shockwave ring, a core flash, and scattering embers
   instead of just vanishing; taking damage on the player or the ward
   flashes a brief red screen tint so a hit always reads as a hit
+- Enemy hitboxes are somewhat larger than their visible silhouette
+  (`Enemy.hitRadius`, entities.js) so landing a shot doesn't demand
+  pixel-precise aim
 
 ## A note on the 3D rendering
 
