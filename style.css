@@ -124,6 +124,20 @@ html, body {
   opacity: 0.6;
 }
 
+/* Small, unobtrusive perf readout — meant to be glanced at once on a real device to see if
+   setLowQuality() actually needed to kick in, not a permanent HUD fixture. */
+#fps-counter {
+  position: absolute;
+  top: 10px;
+  right: 14px;
+  z-index: 25;
+  font-family: var(--font-body);
+  font-size: 11px;
+  color: rgba(224, 192, 104, 0.55);
+  pointer-events: none;
+  user-select: none;
+}
+
 #weapon-switch-btn {
   position: absolute;
   top: 10px;

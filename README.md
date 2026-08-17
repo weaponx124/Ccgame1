@@ -286,13 +286,27 @@ None of that is done yet; this repo is still the pure web build.
 This dev sandbox can only run headless Chromium with software-rendered
 WebGL (no real GPU), so while the 3D pipeline has been tested thoroughly
 for correctness (gameplay logic, placement raycasting, save/load, combat,
-no console errors), its actual frame rate on a real phone GPU hasn't been
-verified from here — worth checking on an actual device once deployed.
-Shadow casters were already trimmed (limbs/decorations don't cast shadows,
-only torsos/heads/major props do) and antialiasing/shadow quality tuned
-down as a reasonable default; if it's heavy on lower-end phones, the next
-places to cut are shadow map resolution (`src/render3d.js`, `_buildLighting`)
-and disabling shadows entirely below some device threshold.
+no console errors), its actual frame rate on a real phone GPU has never
+been verified from here — that's the one thing this environment
+fundamentally can't tell you, and it's worth checking directly on a
+real device.
+
+To make that safe without needing to guess a device tier up front, the
+game now watches its own frame rate and protects itself: a small
+readout in the top-right corner (`#fps-counter`) shows the live rolling
+average, and if it's still below ~33fps six real seconds after a run
+starts (long enough for asset baking/JIT warm-up to settle first), the
+game automatically and permanently drops shadow casting, halves the
+render pixel ratio, and hides every purely-decorative mesh (rim-light
+shells, embers, fog wisps) — `Renderer3D.setLowQuality()`, wired up in
+`game.js`'s main loop (`trackPerf`). Verified directly against Three.js's
+own `renderer.info` counters that this really cuts render work (not just
+looks different): ~12% fewer draw calls, ~9% fewer triangles in a test
+scene with 6 enemies on screen. It's a one-shot, one-way downgrade —
+deliberately no flickering back up to high quality mid-run. If it's
+still heavy on lower-end phones even after that kicks in, the next
+places to cut are shadow map resolution and the moon light's shadow
+frustum size (`src/render3d.js`, `_buildLighting`).
 
 ## Ideas for expanding
 

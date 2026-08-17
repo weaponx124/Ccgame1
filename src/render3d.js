@@ -49,6 +49,14 @@ class Renderer3D {
     this.raycaster = new THREE.Raycaster();
     this.groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 
+    // Every non-essential decorative mesh (rim-light shells, embers, fog wisps) registers itself
+    // here so a single quality downgrade can hide all of them at once, without each one needing
+    // its own bespoke toggle wiring. Set once, permanently, if a device turns out to be struggling
+    // — see setLowQuality(). This sandbox can only test software-rendered WebGL (no real GPU), so
+    // this is the safety net for whatever real-device performance turns out to actually be.
+    this.lowQuality = false;
+    this._toggleableMeshes = [];
+
     this._buildLighting();
     this._buildGround();
     this._buildEnvironment();
@@ -62,6 +70,21 @@ class Renderer3D {
     this.explosionViews = new Map();
     this.bloodDecals = new Map();
     this.hitSparkViews = new Map();
+  }
+
+  /** A one-time, one-way downgrade: drops shadow casting (the dominant draw-call cost, per prior
+   *  profiling in this sandbox), the pixel ratio, and every decorative mesh registered in
+   *  _toggleableMeshes (rim-light shells, embers, fog wisps) — call once if a device turns out to
+   *  be genuinely struggling. Doesn't try to recover back to high quality; a device that needed
+   *  this once will need it again, and flickering quality up/down mid-game would be worse than
+   *  just staying simplified. */
+  setLowQuality() {
+    if (this.lowQuality) return;
+    this.lowQuality = true;
+    this.renderer.shadowMap.enabled = false;
+    this.renderer.setPixelRatio(1);
+    this.renderer.setSize(this.bounds.width, this.bounds.height, false);
+    for (const mesh of this._toggleableMeshes) mesh.visible = false;
   }
 
   // ---------- Coordinate helpers ----------
@@ -378,6 +401,8 @@ class Renderer3D {
     const embers = [];
     for (let i = 0; i < 7; i++) {
       const sprite = this._makeGlowSprite(0xff7028, 2.6 + Math.random() * 1.6, 0.8);
+      sprite.visible = !this.lowQuality;
+      this._toggleableMeshes.push(sprite);
       group.add(sprite);
       embers.push({
         sprite,
@@ -423,6 +448,8 @@ class Renderer3D {
       mesh.rotation.x = -Math.PI / 2;
       const w = 220 + Math.random() * 160;
       mesh.scale.set(w, w * 0.6, 1);
+      mesh.visible = !this.lowQuality;
+      this._toggleableMeshes.push(mesh);
       this.scene.add(mesh);
       wisps.push({
         mesh,
@@ -438,13 +465,15 @@ class Renderer3D {
   }
 
   tickEnvironment(time) {
-    for (const w of this.fogWisps) {
-      w.mesh.position.set(
-        w.baseX + Math.cos(time * w.driftSpeed + w.phase) * w.driftRadius,
-        6,
-        w.baseZ + Math.sin(time * w.driftSpeed * 0.7 + w.phase) * w.driftRadius * 0.6
-      );
-      w.mesh.material.opacity = w.baseOpacity + 0.04 * Math.sin(time * 0.25 + w.phase);
+    if (!this.lowQuality) {
+      for (const w of this.fogWisps) {
+        w.mesh.position.set(
+          w.baseX + Math.cos(time * w.driftSpeed + w.phase) * w.driftRadius,
+          6,
+          w.baseZ + Math.sin(time * w.driftSpeed * 0.7 + w.phase) * w.driftRadius * 0.6
+        );
+        w.mesh.material.opacity = w.baseOpacity + 0.04 * Math.sin(time * 0.25 + w.phase);
+      }
     }
     for (const b of this.brazierLights) {
       const flicker = 0.75 + 0.25 * Math.sin(time * 9 + b.baseX) + 0.12 * Math.sin(time * 23 + b.baseX * 1.7);
@@ -454,6 +483,7 @@ class Renderer3D {
       b.flameGlow.scale.setScalar(26 * (0.85 + flicker * 0.3));
       b.flameGlow.material.opacity = 0.6 + flicker * 0.3;
 
+      if (this.lowQuality) continue; // embers are hidden — no point animating them
       for (const e of b.embers) {
         const cycle = 10 / e.riseSpeed * 3; // seconds per ember before it loops back into the fire
         const t = ((time + e.phase) % cycle) / cycle;
@@ -622,6 +652,8 @@ class Renderer3D {
     });
     const mesh = new THREE.Mesh(geo, mat);
     mesh.scale.setScalar(1.07);
+    mesh.visible = !this.lowQuality;
+    this._toggleableMeshes.push(mesh);
     return mesh;
   }
 

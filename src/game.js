@@ -54,6 +54,7 @@
     continueBtn: document.getElementById('continue-btn'),
     pauseBtn: document.getElementById('pause-btn'),
     muteBtn: document.getElementById('mute-btn'),
+    fpsCounter: document.getElementById('fps-counter'),
     pauseOverlay: document.getElementById('pause-overlay'),
     resumeBtn: document.getElementById('resume-btn'),
     saveQuitBtn: document.getElementById('save-quit-btn'),
@@ -1183,6 +1184,36 @@
     drawDamageFlash();
   }
 
+  // ---------- Performance monitor ----------
+  // This dev sandbox can only run software-rendered WebGL (no real GPU), so real-device frame
+  // rate has never actually been verified — this is the safety net for whatever it turns out to
+  // be. Tracks a rolling average and, once the scene has had time to settle (asset baking, JIT
+  // warm-up), downgrades once automatically if a device is genuinely struggling rather than
+  // staying janky for the rest of the run. The small on-screen readout is meant to be glanced at
+  // once on a real device, not a permanent HUD fixture.
+  const FPS_WARMUP_MS = 6000;
+  const FPS_LOW_THRESHOLD = 33;
+  let fpsSamples = [];
+  let qualityChecked = false;
+  // Real wall-clock time, not the game's own `elapsed` accumulator: elapsed advances by a
+  // dt that's clamped to 50ms/frame (to avoid huge jumps after tab-out), which on a genuinely
+  // slow device systematically under-counts real time as more and more frames hit that clamp —
+  // "6 seconds" needs to mean 6 real seconds regardless of how bad the frame times actually are.
+  const perfMonitorStart = performance.now();
+
+  function trackPerf(dt) {
+    if (dt <= 0) return;
+    fpsSamples.push(1 / dt);
+    if (fpsSamples.length > 90) fpsSamples.shift();
+    if (fpsSamples.length < 30) return;
+    const avgFps = fpsSamples.reduce((a, b) => a + b, 0) / fpsSamples.length;
+    el.fpsCounter.textContent = Math.round(avgFps) + ' fps';
+    if (!qualityChecked && performance.now() - perfMonitorStart > FPS_WARMUP_MS) {
+      qualityChecked = true;
+      if (avgFps < FPS_LOW_THRESHOLD) renderer3d.setLowQuality();
+    }
+  }
+
   // ---------- Main loop ----------
   let lastTime = performance.now();
   let elapsed = 0; // drives ambient effects (rune pulse, fog drift) even while paused
@@ -1190,6 +1221,7 @@
     const dt = Math.min(0.05, (now - lastTime) / 1000); // clamp to avoid huge steps on tab-out
     lastTime = now;
     elapsed += dt;
+    trackPerf(dt);
     if (!paused) update(dt);
     render(dt);
     requestAnimationFrame(loop);
@@ -1258,6 +1290,20 @@
     debugRotatePlacement: () => el.placementRotateBtn.click(),
     debugWorldToScreen: (x, y, height = 0) => renderer3d.worldToScreen(x, y, height),
     debugAudioState: () => ({ ctxState: audio.ctx ? audio.ctx.state : 'not created', muted: audio.muted }),
+    debugForceLowQuality: () => renderer3d.setLowQuality(),
+    debugPerfState: () => ({
+      lowQuality: renderer3d.lowQuality,
+      fpsSamples: fpsSamples.length,
+      avgFps: fpsSamples.length ? Math.round(fpsSamples.reduce((a, b) => a + b, 0) / fpsSamples.length) : null,
+      shadowMapEnabled: renderer3d.renderer.shadowMap.enabled,
+      toggleableVisible: renderer3d._toggleableMeshes.filter((m) => m.visible).length,
+      toggleableTotal: renderer3d._toggleableMeshes.length,
+      rendererInfo: {
+        calls: renderer3d.renderer.info.render.calls,
+        triangles: renderer3d.renderer.info.render.triangles,
+        pixelRatio: renderer3d.renderer.getPixelRatio(),
+      },
+    }),
     debugPlayerLimbState: () => {
       const v = renderer3d.playerView;
       if (!v) return null;
