@@ -107,19 +107,24 @@ None of that is done yet; this repo is still the pure web build.
 - Three regular monster types (zombie, vampire, werewolf) that scale in
   strength each wave, plus a boss — The Revenant, a hulking
   ward-corrupted knight — alone on every 5th wave (`WaveManager.
-  isBossWave`, waves.js), inserted mid-queue so the regular wave is
-  fought through first and the boss arrives as its own moment rather
-  than announcing itself instantly. It's built at a noticeably larger
-  scale in pitted plate armor with the same violet glow as the ward's
-  own altar (a deliberate visual tell that it's *the ward's* corrupted
-  guardian, not just a bigger version of the other three), carries a
-  massive two-handed cleaver, and gets its own health bar under the
-  main HUD. It doesn't fight like the regular enemies at all: instead
-  of landing repeated single-target hits on whatever it's touching, it
-  winds up on a slower timer and slams an area around itself, hitting
-  the hunter, the ward, and any fences in range simultaneously if
-  they're all close enough — real "get away from the boss" pressure
-  instead of just a tankier melee attacker
+  isBossWave`, waves.js), appended after every regular enemy in that
+  wave's queue so the whole wave's worth of chaff gets fought through
+  and cleared *before* the boss shows up at all, instead of it arriving
+  into an already-crowded field. A HUD countdown ("The Revenant arrives
+  in Ns" — `WaveManager.secondsUntilBoss()`, an exact prediction from
+  the fixed spawn pacing, not a guess) gives fair warning the whole
+  time it's still queued, handing off to its health bar the moment it
+  actually spawns. It's built at a noticeably larger scale in pitted
+  plate armor with the same violet glow as the ward's own altar (a
+  deliberate visual tell that it's *the ward's* corrupted guardian, not
+  just a bigger version of the other three), carries a massive
+  two-handed cleaver, and gets its own health bar under the main HUD.
+  It doesn't fight like the regular enemies at all: instead of landing
+  repeated single-target hits on whatever it's touching, it winds up on
+  a slower timer and slams an area around itself, hitting the hunter,
+  the ward, and any fences in range simultaneously if they're all close
+  enough — real "get away from the boss" pressure instead of just a
+  tankier melee attacker
 - Six purchasable upgrades (bolt damage, fire rate, move speed, max HP,
   crit chance, ward repair)
 - Ward destroyed = game over; hunter death just costs some gold and respawns
@@ -229,7 +234,12 @@ None of that is done yet; this repo is still the pure web build.
   break) and Mines (one-shot AoE that detonates on the first enemy to
   step near) — buying one arms a placement cursor, and the next tap on
   the battlefield drops it exactly where you choose (or Cancel refunds
-  it). Each defense has a three-tier ladder (Wooden Fence → Iron
+  it). On touch devices the very first tap after arming is deliberately
+  ignored for a fraction of a second (`placementArmedAt`, game.js) — the
+  same physical tap that hits the shop's "Buy" button can otherwise
+  generate a stray follow-up pointer event that lands on the canvas an
+  instant later and reads as the defense placing itself before you ever
+  chose a spot. Each defense has a three-tier ladder (Wooden Fence → Iron
   Palisade → Runic Barrier; Buried Mine → Arcane Charge → Hellfire Trap).
   Researching the next tier is a one-time purchase that only affects
   *new* placements — existing ones keep their stats until you spend gold

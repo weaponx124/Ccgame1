@@ -45,9 +45,10 @@ class WaveManager {
     }
 
     if (this.isBossWave(waveNumber)) {
-      // Inserted partway through (not first, not last) so the regular chaff arrives and gets
-      // fought through first — the boss shows up mid-wave instead of announcing itself instantly.
-      queue.splice(Math.floor(queue.length / 2), 0, 'revenant');
+      // Appended last, after every regular enemy in the wave — the whole point is giving the
+      // player the entire wave's worth of chaff-clearing time before the boss shows up at all,
+      // instead of still having a field full of regular enemies to deal with when it arrives.
+      queue.push('revenant');
     }
 
     return { queue, waveScale };
@@ -66,6 +67,13 @@ class WaveManager {
     return this.spawnQueue.length;
   }
 
+  // Spawns trickle in slowly on early waves and pace up gradually — never instantaneous. A plain
+  // getter (not just inlined in update() below) so secondsUntilBoss() can use the exact same
+  // number to predict when a still-queued spawn will actually happen.
+  get spawnInterval() {
+    return clamp(1.15 - this.waveNumber * 0.035, 0.25, 1.15);
+  }
+
   /** Returns a spawned Enemy instance when it's time, or null. */
   update(dt, enemiesAliveCount) {
     if (!this.active) return null;
@@ -74,12 +82,22 @@ class WaveManager {
     this._spawnTimer -= dt;
     if (this._spawnTimer > 0) return null;
 
-    // Spawns trickle in slowly on early waves and pace up gradually — never instantaneous.
-    this._spawnTimer = clamp(1.15 - this.waveNumber * 0.035, 0.25, 1.15);
+    this._spawnTimer = this.spawnInterval;
 
     const typeKey = this.spawnQueue.shift();
     const { x, y } = this._randomEdgePoint();
     return new Enemy(x, y, typeKey, this.waveScale);
+  }
+
+  /** Seconds until the boss spawns, or null if this isn't a boss wave or it's already out.
+   *  Spawns are paced purely by a timer (not gated on how many enemies are still alive), so this
+   *  is an exact prediction, not a guess: the boss is however many spawns deep in the queue,
+   *  each spaced spawnInterval apart, plus whatever's left on the timer for the very next one. */
+  secondsUntilBoss() {
+    if (!this.active) return null;
+    const idx = this.spawnQueue.indexOf('revenant');
+    if (idx === -1) return null;
+    return this._spawnTimer + idx * this.spawnInterval;
   }
 
   _randomEdgePoint() {

@@ -57,6 +57,8 @@
     fpsCounter: document.getElementById('fps-counter'),
     bossHealthBar: document.getElementById('boss-health-bar'),
     bossHealthFill: document.getElementById('boss-health-fill'),
+    bossWarning: document.getElementById('boss-warning'),
+    bossWarningSecs: document.getElementById('boss-warning-secs'),
     pauseOverlay: document.getElementById('pause-overlay'),
     resumeBtn: document.getElementById('resume-btn'),
     saveQuitBtn: document.getElementById('save-quit-btn'),
@@ -261,9 +263,12 @@
   // ---------- Manual defense placement ----------
   const ROTATE_STEP = Math.PI / 4; // 45° per tap — enough steps to front any approach direction
 
+  let placementArmedAt = 0;
+
   function beginPlacement(kind, tierIndex, moving = null) {
     placementMode = { kind, tierIndex, moving, rotation: moving ? moving.rotation : 0 };
     placementCursor = null;
+    placementArmedAt = performance.now();
     el.shopOverlay.classList.add('hidden');
     el.reopenShopBtn.classList.add('hidden');
     el.fieldPrepPill.classList.add('hidden');
@@ -325,6 +330,13 @@
 
   function handlePlacementTap(clientX, clientY) {
     if (!placementMode) return;
+    // On touch devices, the same physical tap that hits the shop's "Buy" button (while the shop
+    // overlay is still covering the canvas) can generate a stray follow-up pointer event that
+    // lands on the canvas an instant later, right after beginPlacement() hides the overlay and
+    // arms this cursor — reads as the fence "placing itself" at whatever that stray tap's
+    // coordinates happen to be, before the player ever gets to choose a spot. A real placement
+    // tap is never this fast, so ignore anything within a beat of arming.
+    if (performance.now() - placementArmedAt < 350) return;
     const p = input.toCanvasSpace(clientX, clientY);
     const ground = renderer3d.screenToGround(p.x, p.y);
     if (ground) placeAt(ground.x, ground.y);
@@ -759,6 +771,12 @@
     const boss = enemies.find((e) => e.isBoss && e.alive);
     el.bossHealthBar.classList.toggle('hidden', !boss);
     if (boss) el.bossHealthFill.style.width = clamp(boss.health / boss.maxHealth, 0, 1) * 100 + '%';
+
+    // Advance warning so a boss wave doesn't feel like it ambushes the player mid-fight — shown
+    // only up until the boss actually spawns, at which point the health bar above takes over.
+    const secsUntilBoss = boss ? null : waveManager.secondsUntilBoss();
+    el.bossWarning.classList.toggle('hidden', secsUntilBoss === null);
+    if (secsUntilBoss !== null) el.bossWarningSecs.textContent = Math.ceil(secsUntilBoss);
 
     const weapon = WEAPON_TYPES[player.equippedWeapon];
     el.weaponSwitchBtn.textContent = player.unlockedWeapons.length > 1
