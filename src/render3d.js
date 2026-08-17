@@ -603,6 +603,25 @@ class Renderer3D {
         g.fillStyle = Math.random() < 0.5 ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.1)';
         g.fillRect(x, y, 2, 2);
       }
+    } else if (pattern === 'armor') {
+      // Revenant: pitted, riveted ancient plate.
+      const cols = 5, rows = 5;
+      for (let cx = 0; cx < cols; cx++) {
+        for (let cy = 0; cy < rows; cy++) {
+          const x = (cx + 0.5) * (size / cols), y = (cy + 0.5) * (size / rows);
+          g.fillStyle = `rgba(0,0,0,${0.15 + Math.random() * 0.1})`;
+          g.fillRect(x - size / cols / 2 + 3, y - size / rows / 2 + 3, size / cols - 6, size / rows - 6);
+          for (const [rx, ry] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+            g.fillStyle = 'rgba(0,0,0,0.35)';
+            g.beginPath(); g.arc(x + rx * (size / cols / 2 - 8), y + ry * (size / rows / 2 - 8), 2.4, 0, Math.PI * 2); g.fill();
+          }
+        }
+      }
+      for (let i = 0; i < 340; i++) {
+        const x = Math.random() * size, y = Math.random() * size, r = 1 + Math.random() * 2.5;
+        g.fillStyle = Math.random() < 0.6 ? `rgba(0,0,0,${0.2 + Math.random() * 0.2})` : `rgba(255,255,255,${0.08 + Math.random() * 0.1})`;
+        g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
+      }
     }
 
     const grain = g.getImageData(0, 0, size, size);
@@ -1030,9 +1049,111 @@ class Renderer3D {
     return rig;
   }
 
+  /** The boss: a hulking, ward-corrupted revenant knight. Appears alone on boss waves
+   *  (WaveManager.isBossWave) — deliberately built at a much larger scale than the regular three
+   *  types, in ancient pitted plate armor with the same violet glow as the ward's own altar, so
+   *  it visually reads as "the ward's corrupted guardian" rather than just a bigger zombie. */
+  buildRevenantModel() {
+    const rig = this._buildCreatureBase({
+      legLen: 34, legRadius: 8, torsoLen: 46, torsoRadius: 18, headRadius: 10,
+      skinColor: 0x8a8478, eyeColor: 0xb060ff, limbColor: 0x342e28, torsoColor: 0x3a352e,
+      texturePattern: 'armor',
+    });
+
+    const armorMat = new THREE.MeshStandardMaterial({ color: 0x2c2822, roughness: 0.55, metalness: 0.6, map: Renderer3D._bakeSkinTexture('armor'), bumpMap: Renderer3D._bakeSkinTexture('armor'), bumpScale: 2.5 });
+    const runeGlow = 0xb060ff;
+
+    // A heavy breastplate over the torso.
+    const chest = new THREE.Mesh(Renderer3D._geo().box, armorMat);
+    chest.scale.set(rig.torsoRadius * 1.7, rig.torsoLen * 0.62, rig.torsoRadius * 1.15);
+    chest.position.set(0, rig.legLen + rig.torsoLen * 0.62, rig.torsoRadius * 0.15);
+    chest.castShadow = true;
+    rig.group.add(chest);
+
+    // A cracked rune glowing through the breastplate — the "corrupted by the ward" tell.
+    const rune = new THREE.Mesh(Renderer3D._geo().box, new THREE.MeshStandardMaterial({ color: runeGlow, emissive: runeGlow, emissiveIntensity: 2.2 }));
+    rune.scale.set(rig.torsoRadius * 0.35, rig.torsoRadius * 0.5, 1);
+    rune.position.set(0, rig.legLen + rig.torsoLen * 0.68, rig.torsoRadius * 0.75);
+    rig.group.add(rune);
+    const runeGlowSprite = this._makeGlowSprite(runeGlow, rig.torsoRadius * 1.3, 0.9);
+    runeGlowSprite.position.copy(rune.position);
+    rig.group.add(runeGlowSprite);
+
+    // Oversized pauldrons on both shoulders.
+    for (const s of [rig.shoulderL, rig.shoulderR]) {
+      const pauldron = new THREE.Mesh(Renderer3D._geo().sphere, armorMat);
+      pauldron.scale.setScalar(rig.legRadius * 1.6);
+      pauldron.castShadow = true;
+      s.add(pauldron);
+      const spike = new THREE.Mesh(Renderer3D._geo().cone, armorMat);
+      spike.scale.set(1.6, 6, 1.6);
+      spike.position.y = rig.legRadius * 1.2;
+      s.add(spike);
+    }
+
+    // Greaves on the shins.
+    for (const knee of [rig.kneeL, rig.kneeR]) {
+      const greave = new THREE.Mesh(Renderer3D._geo().cylinder, armorMat);
+      greave.scale.set(rig.legRadius * 0.95, rig.shinLen * 0.55, rig.legRadius * 0.95);
+      greave.position.y = -rig.shinLen * 0.35;
+      knee.add(greave);
+    }
+
+    // A tattered ceremonial banner hanging from the waist — echoes the hunter's cloak/vampire's
+    // cape silhouette language, but shredded and colorless. A single wide plane rather than
+    // several strips — this boss already carries more meshes than any regular enemy (armor,
+    // weapon, helm), so it's worth being economical about further additions with a similar look.
+    const bannerMat = new THREE.MeshStandardMaterial({ color: 0x1c1a16, roughness: 0.95, side: THREE.DoubleSide });
+    const banner = new THREE.Mesh(new THREE.PlaneGeometry(16, 26), bannerMat);
+    banner.position.set(0, rig.legLen - 4, -rig.torsoRadius * 0.5);
+    banner.rotation.x = 0.15;
+    rig.group.add(banner);
+
+    // A gaunt, half-skeletal helm instead of the shared jaw — hollow save for the glowing eyes.
+    const helmMat = new THREE.MeshStandardMaterial({ color: 0x24211c, roughness: 0.6, metalness: 0.5 });
+    const helm = new THREE.Mesh(Renderer3D._geo().sphere, helmMat);
+    helm.scale.set(rig.headRadius * 1.08, rig.headRadius * 0.65, rig.headRadius * 1.08);
+    helm.position.y = rig.headRadius * 0.35;
+    helm.castShadow = true;
+    rig.headGroup.add(helm);
+    const horn1 = new THREE.Mesh(Renderer3D._geo().cone, helmMat);
+    horn1.scale.set(1.3, 7, 1.3);
+    horn1.position.set(-rig.headRadius * 0.5, rig.headRadius * 0.7, -rig.headRadius * 0.1);
+    horn1.rotation.z = 0.3;
+    rig.headGroup.add(horn1);
+    const horn2 = horn1.clone();
+    horn2.position.x *= -1;
+    horn2.rotation.z *= -1;
+    rig.headGroup.add(horn2);
+
+    // A massive two-handed cleaver held in front — the boss's whole silhouette should read as
+    // "this hits hard", not just "this has a lot of HP".
+    const weaponMat = new THREE.MeshStandardMaterial({ color: 0x4a4038, roughness: 0.5, metalness: 0.7 });
+    const weaponPivot = new THREE.Group();
+    weaponPivot.position.set(rig.torsoRadius * 0.9, rig.legLen + rig.torsoLen * 0.55, rig.torsoRadius * 0.6);
+    const haft = new THREE.Mesh(Renderer3D._geo().cylinder, weaponMat);
+    haft.scale.set(1.8, 30, 1.8);
+    haft.position.y = 15;
+    haft.castShadow = true;
+    weaponPivot.add(haft);
+    const blade = new THREE.Mesh(Renderer3D._geo().box, weaponMat);
+    blade.scale.set(10, 34, 3);
+    blade.position.y = 46;
+    blade.rotation.z = 0.08;
+    blade.castShadow = true;
+    weaponPivot.add(blade);
+    const bladeGlow = this._makeGlowSprite(runeGlow, 10, 0.6);
+    bladeGlow.position.set(0, 46, 0);
+    weaponPivot.add(bladeGlow);
+    rig.group.add(weaponPivot);
+
+    return { ...rig, weaponPivot };
+  }
+
   _buildByType(typeKey) {
     if (typeKey === 'vampire') return this.buildVampireModel();
     if (typeKey === 'werewolf') return this.buildWerewolfModel();
+    if (typeKey === 'revenant') return this.buildRevenantModel();
     return this.buildZombieModel();
   }
 
@@ -1309,7 +1430,7 @@ class Renderer3D {
       // Per-species baseline pose, layered under the shared swing/lunge animation below — this is
       // what makes a zombie shamble with arms out, a vampire stand tall and controlled, and a
       // werewolf carry a crouched, ready-to-pounce bend even before either one moves.
-      const kneeBase = e.typeKey === 'vampire' ? 0.04 : e.typeKey === 'werewolf' ? 0.24 : 0.12;
+      const kneeBase = e.typeKey === 'vampire' ? 0.04 : e.typeKey === 'werewolf' ? 0.24 : e.isBoss ? 0.16 : 0.12;
       const zombieReach = e.typeKey === 'zombie' ? 0.4 : 0;
 
       if (e._isMoving) {
@@ -1334,10 +1455,17 @@ class Renderer3D {
         v.kneeR.rotation.z = kneeBase;
         v.kneeL.rotation.x = 0;
         v.kneeR.rotation.x = 0;
-        const sinceAttack = ENEMY_ATTACK_INTERVAL - e._attackCooldown;
-        const lunge = sinceAttack >= 0 && sinceAttack < 0.3 ? Math.sin((sinceAttack / 0.3) * Math.PI) : 0;
-        v.shoulderL.rotation.z = -lunge * 0.7;
-        v.shoulderR.rotation.z = lunge * 0.7;
+        // A boss winds up and strikes on its own, much slower slam timer instead of the regular
+        // per-enemy attack interval — the swing this drives is bigger too (see below), so a slam
+        // reads as a real haymaker instead of the same jab every other enemy throws.
+        const attackInterval = e.isBoss ? REVENANT_SLAM_INTERVAL : ENEMY_ATTACK_INTERVAL;
+        const cooldown = e.isBoss ? e._slamCooldown : e._attackCooldown;
+        const windup = e.isBoss ? 0.6 : 0.3;
+        const sinceAttack = attackInterval - cooldown;
+        const lunge = sinceAttack >= 0 && sinceAttack < windup ? Math.sin((sinceAttack / windup) * Math.PI) : 0;
+        const lungeAmt = e.isBoss ? 1.1 : 0.7;
+        v.shoulderL.rotation.z = -lunge * lungeAmt;
+        v.shoulderR.rotation.z = lunge * lungeAmt;
         v.shoulderL.rotation.x = zombieReach;
         v.shoulderR.rotation.x = -zombieReach;
         v.elbowL.rotation.z = 0.15 + lunge * 0.4;

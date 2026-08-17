@@ -319,10 +319,33 @@ class AudioManager {
     this._burst({ duration: 0.2, gain: 0.1, filterType: 'bandpass', filterFreq: 800, q: 2, reverb: 0.28 });
   }
 
+  revenantGroan() {
+    if (!this._allow('revenantVoice', 2500)) return;
+    this._tone({ freq: 60, freqEnd: 42, duration: 0.7, type: 'sawtooth', gain: 0.2, distort: 6, jitter: 0.06, reverb: 0.4 });
+    this._tone({ freq: 59, freqEnd: 41, duration: 0.7, type: 'sawtooth', gain: 0.15, detune: 11, distort: 6, reverb: 0.4 });
+  }
+
   monsterVoice(typeKey) {
     if (typeKey === 'vampire') this.vampireHiss();
     else if (typeKey === 'werewolf') this.werewolfGrowl();
+    else if (typeKey === 'revenant') this.revenantGroan();
     else this.zombieGroan();
+  }
+
+  // ---------- Boss ----------
+  bossSpawn() {
+    this._duck(0.35, 50, 700);
+    this._tone({ freq: 50, freqEnd: 34, duration: 1.4, type: 'sawtooth', gain: 0.3, distort: 5, reverb: 0.5 });
+    this._tone({ freq: 51, freqEnd: 35, duration: 1.4, type: 'sawtooth', gain: 0.22, detune: 13, distort: 5, reverb: 0.5 });
+    this._tone({ freq: 100, freqEnd: 68, duration: 1.4, type: 'sine', gain: 0.14, delay: 0.1, reverb: 0.5 });
+    this._burst({ duration: 0.5, gain: 0.2, filterType: 'lowpass', filterFreq: 900, delay: 0.05, reverb: 0.45 });
+  }
+
+  bossSlam() {
+    this._duck(0.45, 40, 450);
+    this._burst({ duration: 0.35, gain: 0.45, filterType: 'lowpass', filterFreq: 2200, filterFreqEnd: 120, distort: 9, reverb: 0.35 });
+    this._tone({ freq: 55, freqEnd: 22, duration: 0.4, type: 'sine', gain: 0.4, distort: 5, reverb: 0.35 });
+    this._tone({ freq: 56, freqEnd: 23, duration: 0.4, type: 'sawtooth', gain: 0.16, detune: 9, distort: 5, reverb: 0.35 });
   }
 
   // ---------- Economy / UI ----------

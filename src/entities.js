@@ -161,6 +161,12 @@ class Bullet {
 // so the visible swing roughly lines up with when damage actually lands.
 const ENEMY_ATTACK_INTERVAL = 0.8;
 
+// Boss (revenant) slam attack: a slower, much heavier area hit instead of the regular per-target
+// contact damage every other enemy uses — see game.js's boss branch in the contact-damage loop.
+// Shared with Renderer3D for the same "wind up and strike" animation timing as ENEMY_ATTACK_INTERVAL.
+const REVENANT_SLAM_INTERVAL = 2.2;
+const REVENANT_SLAM_RADIUS = 70;
+
 // preferBaseChance: how likely a freshly spawned enemy of this type is to head for the ward
 // instead of hunting the player — see the target-selection comment on Enemy for how this plays
 // out. Zombies mostly siege the ward, vampires mostly hunt the player, werewolves are a
@@ -190,6 +196,17 @@ const ENEMY_TYPES = {
     reward: 15,
     preferBaseChance: 0.5,
   },
+  // Appears alone, once, on boss waves (see WaveManager._buildWave) instead of mixed into the
+  // regular composition. Deals no regular per-target contact damage — its only attack is the
+  // slower, much heavier slam AOE (game.js's boss branch), so `damage` here is that slam's damage.
+  revenant: {
+    radius: 26,
+    speed: 35,
+    health: 600,
+    damage: 32,
+    reward: 80,
+    preferBaseChance: 0.25,
+  },
 };
 
 class Enemy {
@@ -215,6 +232,11 @@ class Enemy {
     // now. update() below still lets an enemy get opportunistically distracted by whichever
     // target is currently *much* closer than its preferred one.
     this.targetPreference = Math.random() < def.preferBaseChance ? 'base' : 'player';
+
+    this.isBoss = typeKey === 'revenant';
+    // A short head start rather than the full interval, so a boss that's already in slam range
+    // the moment it arrives doesn't stand there doing nothing for a couple of seconds first.
+    this._slamCooldown = this.isBoss ? REVENANT_SLAM_INTERVAL * 0.4 : 0;
   }
 
   /**
@@ -253,6 +275,7 @@ class Enemy {
     }
     if (this._hitFlash > 0) this._hitFlash -= dt;
     if (this._attackCooldown > 0) this._attackCooldown -= dt;
+    if (this.isBoss) this._slamCooldown -= dt;
   }
 
   takeDamage(amount) {

@@ -1,5 +1,7 @@
 // Wave spawning logic: defines what enemies appear on each wave and paces their spawn timing.
 
+const BOSS_WAVE_INTERVAL = 5; // every 5th wave (5, 10, 15, ...) gets a revenant
+
 class WaveManager {
   constructor(bounds) {
     this.bounds = bounds;
@@ -7,6 +9,10 @@ class WaveManager {
     this.spawnQueue = [];
     this._spawnTimer = 0;
     this.active = false;
+  }
+
+  isBossWave(waveNumber) {
+    return waveNumber > 0 && waveNumber % BOSS_WAVE_INTERVAL === 0;
   }
 
   /**
@@ -36,6 +42,12 @@ class WaveManager {
     for (let i = queue.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [queue[i], queue[j]] = [queue[j], queue[i]];
+    }
+
+    if (this.isBossWave(waveNumber)) {
+      // Inserted partway through (not first, not last) so the regular chaff arrives and gets
+      // fought through first — the boss shows up mid-wave instead of announcing itself instantly.
+      queue.splice(Math.floor(queue.length / 2), 0, 'revenant');
     }
 
     return { queue, waveScale };

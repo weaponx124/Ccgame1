@@ -55,6 +55,8 @@
     pauseBtn: document.getElementById('pause-btn'),
     muteBtn: document.getElementById('mute-btn'),
     fpsCounter: document.getElementById('fps-counter'),
+    bossHealthBar: document.getElementById('boss-health-bar'),
+    bossHealthFill: document.getElementById('boss-health-fill'),
     pauseOverlay: document.getElementById('pause-overlay'),
     resumeBtn: document.getElementById('resume-btn'),
     saveQuitBtn: document.getElementById('save-quit-btn'),
@@ -754,6 +756,10 @@
     el.playerHealthFill.style.width = playerPct + '%';
     el.playerHealthText.textContent = `${Math.ceil(player.health)}/${player.maxHealth}`;
 
+    const boss = enemies.find((e) => e.isBoss && e.alive);
+    el.bossHealthBar.classList.toggle('hidden', !boss);
+    if (boss) el.bossHealthFill.style.width = clamp(boss.health / boss.maxHealth, 0, 1) * 100 + '%';
+
     const weapon = WEAPON_TYPES[player.equippedWeapon];
     el.weaponSwitchBtn.textContent = player.unlockedWeapons.length > 1
       ? `${weapon.shortName} ⇄`
@@ -800,7 +806,8 @@
     const spawned = waveManager.update(dt, enemies.length);
     if (spawned) {
       enemies.push(spawned);
-      audio.monsterVoice(spawned.typeKey);
+      if (spawned.isBoss) audio.bossSpawn();
+      else audio.monsterVoice(spawned.typeKey);
     }
 
     for (const enemy of enemies) {
@@ -830,6 +837,32 @@
       }
 
       enemy.update(dt, target, speedMult);
+
+      if (enemy.isBoss) {
+        // A boss doesn't land regular single-target contact damage at all — its only attack is
+        // this slower, much heavier area slam, which can land on the player, the ward, and any
+        // fences simultaneously if they're all in range, instead of just whichever one it happens
+        // to be touching.
+        if (enemy._slamCooldown <= 0) {
+          const hitsPlayer = dist(enemy.x, enemy.y, player.x, player.y) <= REVENANT_SLAM_RADIUS + player.radius;
+          const hitsBase = dist(enemy.x, enemy.y, base.x, base.y) <= REVENANT_SLAM_RADIUS + base.radius;
+          if (hitsPlayer || hitsBase) {
+            if (hitsPlayer) { player.takeDamage(enemy.damage); damageFlash = Math.min(1, damageFlash + 0.5); }
+            if (hitsBase) { base.takeDamage(enemy.damage); damageFlash = Math.min(1, damageFlash + 0.35); }
+            for (const fence of fences) {
+              if (fence.alive && dist(enemy.x, enemy.y, fence.x, fence.y) <= REVENANT_SLAM_RADIUS + fence.radius) {
+                fence.takeDamage(enemy.damage * 2);
+              }
+            }
+            explosions.push(new Explosion(enemy.x, enemy.y, REVENANT_SLAM_RADIUS));
+            audio.bossSlam();
+            enemy._slamCooldown = REVENANT_SLAM_INTERVAL;
+          } else {
+            enemy._slamCooldown = 0.3; // nothing in range yet — recheck again soon rather than waiting a full interval
+          }
+        }
+        continue;
+      }
 
       // Contact is sustained, not a one-shot suicide hit: an enemy that reaches the ward or the
       // hunter keeps landing damage on a cooldown until something (the player) actually kills it.

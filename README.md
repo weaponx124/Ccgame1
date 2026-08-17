@@ -104,8 +104,22 @@ None of that is done yet; this repo is still the pure web build.
 ## Current proof-of-concept scope
 
 - One arena, one warded altar to defend, one demon hunter
-- Three monster types (zombie, vampire, werewolf) that scale in strength
-  each wave
+- Three regular monster types (zombie, vampire, werewolf) that scale in
+  strength each wave, plus a boss — The Revenant, a hulking
+  ward-corrupted knight — alone on every 5th wave (`WaveManager.
+  isBossWave`, waves.js), inserted mid-queue so the regular wave is
+  fought through first and the boss arrives as its own moment rather
+  than announcing itself instantly. It's built at a noticeably larger
+  scale in pitted plate armor with the same violet glow as the ward's
+  own altar (a deliberate visual tell that it's *the ward's* corrupted
+  guardian, not just a bigger version of the other three), carries a
+  massive two-handed cleaver, and gets its own health bar under the
+  main HUD. It doesn't fight like the regular enemies at all: instead
+  of landing repeated single-target hits on whatever it's touching, it
+  winds up on a slower timer and slams an area around itself, hitting
+  the hunter, the ward, and any fences in range simultaneously if
+  they're all close enough — real "get away from the boss" pressure
+  instead of just a tankier melee attacker
 - Six purchasable upgrades (bolt damage, fire rate, move speed, max HP,
   crit chance, ward repair)
 - Ward destroyed = game over; hunter death just costs some gold and respawns
