@@ -15,6 +15,11 @@
 // becomes the 3D ground plane: worldX = x - bounds.width/2, worldZ = y - bounds.height/2,
 // worldY = height above the ground. Centering on the origin keeps camera/light math simple.
 
+// Height (world-Y) the player's weapon barrel sits at — matched by buildPlayerModel()'s weapon
+// pivot and reused for bullets' render height, so a shot visibly leaves from the barrel tip
+// instead of popping to some unrelated fixed height the instant it spawns.
+const PLAYER_MUZZLE_HEIGHT = 64;
+
 class Renderer3D {
   constructor(canvas, bounds, dpr) {
     this.bounds = bounds;
@@ -467,7 +472,7 @@ class Renderer3D {
     // The barrel reaches exactly PLAYER_MUZZLE_DISTANCE (entities.js) from the group origin, so
     // Player.getMuzzlePosition() — where bullets actually spawn — always matches the visible tip.
     const weaponPivot = new THREE.Group();
-    weaponPivot.position.set(rig.torsoRadius * 0.9, rig.legLen + rig.torsoLen + rig.headRadius * 0.1, 0);
+    weaponPivot.position.set(rig.torsoRadius * 0.9, PLAYER_MUZZLE_HEIGHT, 0);
     const muzzleReach = PLAYER_MUZZLE_DISTANCE - weaponPivot.position.x;
     const weaponMat = new THREE.MeshStandardMaterial({ color: 0x8a8a94, roughness: 0.4, metalness: 0.6 });
     const weaponBar = new THREE.Mesh(Renderer3D._geo().cylinder, weaponMat);
@@ -646,19 +651,26 @@ class Renderer3D {
     const group = new THREE.Group();
     const bodyMat = new THREE.MeshStandardMaterial({ color: 0x2a2018, roughness: 0.9 });
     const body = new THREE.Mesh(Renderer3D._geo().cylinder, bodyMat);
-    body.scale.set(9, 3, 9);
-    body.position.y = 1.5;
+    body.scale.set(13, 4, 13);
+    body.position.y = 2;
     body.receiveShadow = true;
     group.add(body);
     const glowMat = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 1.5 });
     const glow = new THREE.Mesh(Renderer3D._geo().cylinder, glowMat);
-    glow.scale.set(4, 0.6, 4);
-    glow.position.y = 3.2;
+    glow.scale.set(5.5, 0.8, 5.5);
+    glow.position.y = 4.3;
     group.add(glow);
-    const light = new THREE.PointLight(color, 16, 90, 1.5);
-    light.position.y = 5;
+    // A faint ring on the ground marking the trigger radius, so its (now bigger) activation
+    // range actually reads instead of being an invisible number.
+    const ringMat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.28, side: THREE.DoubleSide, depthWrite: false });
+    const ring = new THREE.Mesh(new THREE.RingGeometry(16, 18.5, 28), ringMat);
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.y = 0.2;
+    group.add(ring);
+    const light = new THREE.PointLight(color, 20, 110, 1.5);
+    light.position.y = 6;
     group.add(light);
-    return { group, glow, glowMat, light };
+    return { group, glow, glowMat, light, ringMat };
   }
 
   buildExplosionModel(maxRadius) {
@@ -678,23 +690,55 @@ class Renderer3D {
     return { mesh, mat };
   }
 
-  buildBulletModel(isCrit, isPiercing) {
+  /** Each weapon's shot reads as what it actually is: a fletched bolt, a stubby lead slug, or a
+   *  spinning silver ring — not one generic glowing capsule for everything. */
+  buildBulletModel(weaponType, isCrit) {
     const group = new THREE.Group();
-    const color = isPiercing ? 0xcfd6dc : (isCrit ? 0xff8c3c : 0xe0c068);
-    const mat = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 1.6 });
-    let mesh;
-    if (isPiercing) {
-      mesh = new THREE.Mesh(new THREE.TorusGeometry(4, 1, 6, 12), mat);
-      mesh.rotation.x = Math.PI / 2;
+    let lightColor;
+
+    if (weaponType === 'chakram') {
+      lightColor = 0x9fd0ff;
+      const mat = new THREE.MeshStandardMaterial({ color: 0xcfd6dc, emissive: lightColor, emissiveIntensity: 1.2, metalness: 0.6, roughness: 0.3 });
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(4, 1, 6, 12), mat);
+      ring.rotation.x = Math.PI / 2;
+      group.add(ring);
+    } else if (weaponType === 'blunderbuss') {
+      lightColor = isCrit ? 0xffb060 : 0xd8d0c0;
+      const mat = new THREE.MeshStandardMaterial({ color: lightColor, emissive: lightColor, emissiveIntensity: 0.9, roughness: 0.35, metalness: 0.55 });
+      const slugR = isCrit ? 2.6 : 2.1;
+      const slug = new THREE.Mesh(Renderer3D._geo().capsule, mat);
+      slug.scale.set(slugR, slugR * 1.5, slugR);
+      slug.rotation.z = Math.PI / 2;
+      group.add(slug);
     } else {
-      mesh = new THREE.Mesh(Renderer3D._geo().capsule, mat);
-      mesh.scale.set(1.4, isCrit ? 6 : 4, 1.4);
-      mesh.rotation.z = Math.PI / 2;
+      // Crossbow bolt: fletched shaft with a glowing arrowhead, angled to actually look like an arrow.
+      lightColor = isCrit ? 0xff8c3c : 0xe0c068;
+      const shaftLen = isCrit ? 20 : 16;
+      const shaftMat = new THREE.MeshStandardMaterial({ color: 0x5a4a3a, roughness: 0.85 });
+      const shaft = new THREE.Mesh(Renderer3D._geo().cylinder, shaftMat);
+      shaft.scale.set(0.6, shaftLen, 0.6);
+      shaft.rotation.z = Math.PI / 2;
+      group.add(shaft);
+
+      const headMat = new THREE.MeshStandardMaterial({ color: lightColor, emissive: lightColor, emissiveIntensity: 1.4 });
+      const head = new THREE.Mesh(Renderer3D._geo().cone, headMat);
+      head.scale.set(1.6, 4, 1.6);
+      head.rotation.z = -Math.PI / 2;
+      head.position.x = shaftLen / 2 + 1.5;
+      group.add(head);
+
+      const finMat = new THREE.MeshStandardMaterial({ color: 0x2e2318, side: THREE.DoubleSide });
+      for (const fz of [-1, 1]) {
+        const fin = new THREE.Mesh(new THREE.PlaneGeometry(4.5, 2.2), finMat);
+        fin.position.set(-shaftLen / 2 + 1.5, 0, fz * 0.7);
+        fin.rotation.y = Math.PI / 2;
+        group.add(fin);
+      }
     }
-    group.add(mesh);
-    const light = new THREE.PointLight(color, 14, 70, 1.5);
+
+    const light = new THREE.PointLight(lightColor, 14, 70, 1.5);
     group.add(light);
-    return { group, mesh, mat };
+    return { group };
   }
 
   buildHitSparkModel(isCrit) {
@@ -772,11 +816,11 @@ class Renderer3D {
       seen.add(b);
       let v = this.bulletViews.get(b);
       if (!v) {
-        v = this.buildBulletModel(b.isCrit, b.isPiercing);
+        v = this.buildBulletModel(b.weaponType, b.isCrit);
         this.scene.add(v.group);
         this.bulletViews.set(b, v);
       }
-      v.group.position.set(this.worldX(b.x), 14, this.worldZ(b.y));
+      v.group.position.set(this.worldX(b.x), PLAYER_MUZZLE_HEIGHT, this.worldZ(b.y));
       v.group.rotation.y = this.yawFromAngle(Math.atan2(b.vy, b.vx));
     }
     for (const [b, v] of this.bulletViews) {
@@ -828,6 +872,7 @@ class Renderer3D {
       const pulse = 0.5 + 0.5 * Math.sin(time * 3 + m.x);
       v.glowMat.emissiveIntensity = 1 + pulse * 1.2;
       v.light.intensity = 10 + pulse * 12;
+      v.ringMat.opacity = 0.16 + pulse * 0.18;
     }
     for (const [m, v] of this.mineViews) {
       if (!seen.has(m)) {

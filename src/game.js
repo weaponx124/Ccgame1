@@ -76,6 +76,10 @@
     defenseSelectCloseBtn: document.getElementById('defense-select-close-btn'),
   };
 
+  // Seconds between melee hits an enemy in contact range can land — they keep fighting until
+  // killed instead of dealing one hit and vanishing.
+  const ENEMY_ATTACK_INTERVAL = 0.8;
+
   // ---------- Game state ----------
   let state; // 'playing' | 'shop' | 'gameover' | 'menu'
   let paused = false;
@@ -290,7 +294,7 @@
     }
     for (const m of mines) {
       if (m === ignore) continue;
-      if (dist(x, y, m.x, m.y) < 24) return false;
+      if (dist(x, y, m.x, m.y) < 30) return false;
     }
     return true;
   }
@@ -755,14 +759,20 @@
 
       enemy.update(dt, target, speedMult);
 
+      // Contact is sustained, not a one-shot suicide hit: an enemy that reaches the ward or the
+      // hunter keeps landing damage on a cooldown until something (the player) actually kills it.
       if (dist(enemy.x, enemy.y, base.x, base.y) <= base.radius + enemy.radius) {
-        base.takeDamage(enemy.damage);
-        enemy.alive = false;
-        damageFlash = Math.min(1, damageFlash + 0.35);
+        if (enemy._attackCooldown <= 0) {
+          base.takeDamage(enemy.damage);
+          enemy._attackCooldown = ENEMY_ATTACK_INTERVAL;
+          damageFlash = Math.min(1, damageFlash + 0.35);
+        }
       } else if (dist(enemy.x, enemy.y, player.x, player.y) <= player.radius + enemy.radius) {
-        player.takeDamage(enemy.damage);
-        enemy.alive = false;
-        damageFlash = Math.min(1, damageFlash + 0.5);
+        if (enemy._attackCooldown <= 0) {
+          player.takeDamage(enemy.damage);
+          enemy._attackCooldown = ENEMY_ATTACK_INTERVAL;
+          damageFlash = Math.min(1, damageFlash + 0.5);
+        }
       }
     }
     fences = fences.filter((f) => f.alive);
@@ -1079,7 +1089,7 @@
       gold,
       wave: waveManager.waveNumber,
       enemies: enemies.map((e) => ({ x: e.x, y: e.y, health: e.health, radius: e.radius, hitCenter: e.getHitCenter(), hitRadius: e.hitRadius })),
-      bullets: bullets.map((b) => ({ x: b.x, y: b.y, vx: b.vx, vy: b.vy, radius: b.radius, pierceRemaining: b.pierceRemaining })),
+      bullets: bullets.map((b) => ({ x: b.x, y: b.y, vx: b.vx, vy: b.vy, radius: b.radius, pierceRemaining: b.pierceRemaining, weaponType: b.weaponType })),
       player: {
         x: player.x,
         y: player.y,

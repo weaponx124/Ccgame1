@@ -98,6 +98,13 @@ None of that is done yet; this repo is still the pure web build.
 - Six purchasable upgrades (bolt damage, fire rate, move speed, max HP,
   crit chance, ward repair)
 - Ward destroyed = game over; hunter death just costs some gold and respawns
+- Enemies in contact range keep fighting: they land a hit on a cooldown
+  (not once and gone) until the player actually kills them
+- Each weapon fires a projectile that matches it — a fletched bolt for
+  the crossbow, a stubby lead slug for the blunderbuss, a spinning ring
+  for the chakram — instead of one generic shot for everything
+- Mines are bigger and have a larger, visibly-ringed trigger radius so
+  their danger zone actually reads on the ground
 - Real 3D rendering (Three.js/WebGL), not hand-drawn Canvas 2D vector art:
   actual lit geometry, materials, and cast shadows from a moonlit
   directional light plus flickering brazier and altar point lights. The

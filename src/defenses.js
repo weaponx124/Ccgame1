@@ -62,8 +62,8 @@ class Mine {
     this.x = x;
     this.y = y;
     this.tierIndex = tierIndex;
-    this.radius = 7;
-    this.triggerRadius = 12;
+    this.radius = 10;
+    this.triggerRadius = 18;
     this.damage = tier.damage;
     this.blastRadius = tier.blastRadius;
     this.alive = true;
