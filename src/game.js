@@ -365,14 +365,28 @@
     el.defenseSelectBar.classList.add('hidden');
   }
 
+  // A tap has to land within this many *logical* px of a placed item's edge to select it. Generous
+  // on purpose: a real fingertip is nowhere near pixel-precise, and now that items are viewed under
+  // a 3D perspective camera instead of a flat top-down 2D view, judging exactly where their ground
+  // anchor sits is much harder than it used to be — the old +8 padding measured out to roughly a
+  // 20px-diameter touch target on a real phone, well under any usable minimum.
+  const FIELD_TAP_PAD = 34;
+
   function handleFieldTap(x, y) {
+    let best = null;
+    let bestDist = Infinity;
     for (const f of fences) {
-      if (f.alive && dist(x, y, f.x, f.y) <= f.radius + 8) { selectDefense('fence', f); return; }
+      if (!f.alive) continue;
+      const d = dist(x, y, f.x, f.y);
+      if (d <= f.radius + FIELD_TAP_PAD && d < bestDist) { best = { kind: 'fence', ref: f }; bestDist = d; }
     }
     for (const m of mines) {
-      if (m.alive && dist(x, y, m.x, m.y) <= m.radius + 8) { selectDefense('mine', m); return; }
+      if (!m.alive) continue;
+      const d = dist(x, y, m.x, m.y);
+      if (d <= m.radius + FIELD_TAP_PAD && d < bestDist) { best = { kind: 'mine', ref: m }; bestDist = d; }
     }
-    hideDefenseSelection();
+    if (best) selectDefense(best.kind, best.ref);
+    else hideDefenseSelection();
   }
 
   el.defenseSelectMoveBtn.addEventListener('click', () => {
@@ -1136,5 +1150,6 @@
     debugUpgradeSelected: () => el.defenseSelectUpgradeBtn.click(),
     debugRotateSelected: () => el.defenseSelectRotateBtn.click(),
     debugRotatePlacement: () => el.placementRotateBtn.click(),
+    debugWorldToScreen: (x, y, height = 0) => renderer3d.worldToScreen(x, y, height),
   };
 })();

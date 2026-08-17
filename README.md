@@ -171,7 +171,12 @@ None of that is done yet; this repo is still the pure web build.
   pulsing badge on the View Field button (only shown once you have an
   already-placed fence/mine sitting behind a tier you've researched) both
   point at View Field as the place to actually apply the upgrade to
-  something already on the field
+  something already on the field. Tapping to select a placed item is
+  forgiving (`FIELD_TAP_PAD`, game.js) rather than needing a pixel-precise
+  hit, and picks whichever item is closest to the tap if more than one is
+  in range — important now that items sit under a 3D perspective camera,
+  where judging an object's exact ground position by eye is harder than
+  the old flat top-down view
 - Capped shop upgrades (bolt damage, fire rate, move speed, max HP, crit
   chance) show a row of pips under their description — filled pips are
   levels you already own, empty ones are what's left before that upgrade
