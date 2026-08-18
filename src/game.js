@@ -81,6 +81,7 @@
     defenseSelectTitle: document.getElementById('defense-select-title'),
     defenseSelectMoveBtn: document.getElementById('defense-select-move-btn'),
     defenseSelectRotateBtn: document.getElementById('defense-select-rotate-btn'),
+    defenseSelectRepairBtn: document.getElementById('defense-select-repair-btn'),
     defenseSelectUpgradeBtn: document.getElementById('defense-select-upgrade-btn'),
     defenseSelectCloseBtn: document.getElementById('defense-select-close-btn'),
     marksAmount: document.getElementById('marks-amount'),
@@ -99,6 +100,10 @@
   let defenseState; // { fenceTier, mineTier, fencesPlaced, minesPlaced }
   let placementMode; // null | { kind: 'fence'|'mine', tierIndex, moving: Fence|Mine|null }
   let placementCursor; // { x, y } | null — last known pointer position while placing
+  // Drag-to-lay-a-run-of-fences state (separate from placementMode: this is a press-drag-release
+  // gesture, not a single tap-to-commit). start is null while armed but not yet touched; once set,
+  // a drag is in progress and end tracks the live pointer position until release commits it.
+  let fenceDraw; // null | { tierIndex, start: {x,y}|null, end: {x,y}|null }
   let invalidPlacementFlash; // seconds remaining on the "can't place here" marker
   let prepCountdown; // seconds remaining in the current shop/prep phase
   let damageFlash; // 0..1, screen-tint intensity that decays after the player/base is hit
@@ -235,6 +240,7 @@
     defenseState = { fenceTier: 0, mineTier: 0, fencesPlaced: 0, minesPlaced: 0 };
     placementMode = null;
     placementCursor = null;
+    fenceDraw = null;
     invalidPlacementFlash = 0;
     damageFlash = 0;
     shopHidden = false;
@@ -313,13 +319,28 @@
     const placed = defenseState[placedKey];
     const placedMaxed = placed >= maxTotal;
 
-    appendDefenseRow({
-      name: `${tier.name} — Lv ${tierIndex + 1}/${tiers.length}`,
-      desc: `${describe(tier)} ${placed}/${maxTotal} placed.`,
-      maxed: placedMaxed,
-      cost: tier.cost,
-      onBuy: () => beginPlacement(kind, tierIndex),
-    });
+    if (kind === 'fence') {
+      // Fences don't have a single fixed price to pay up front — you drag out a run of them and
+      // pay per segment as you go (see beginFenceDraw), so this row arms that mode instead of
+      // charging immediately. `cost` still gates the button (need at least one segment's worth).
+      appendDefenseRow({
+        name: `${tier.name} — Lv ${tierIndex + 1}/${tiers.length}`,
+        desc: `${describe(tier)} Drag along the battlefield to lay a run of them. ${placed}/${maxTotal} placed.`,
+        maxed: placedMaxed,
+        cost: tier.cost,
+        costLabel: `${tier.cost}g each`,
+        deferred: true,
+        onBuy: () => beginFenceDraw(tierIndex),
+      });
+    } else {
+      appendDefenseRow({
+        name: `${tier.name} — Lv ${tierIndex + 1}/${tiers.length}`,
+        desc: `${describe(tier)} ${placed}/${maxTotal} placed.`,
+        maxed: placedMaxed,
+        cost: tier.cost,
+        onBuy: () => beginPlacement(kind, tierIndex),
+      });
+    }
 
     if (tierIndex < tiers.length - 1) {
       const nextTier = tiers[tierIndex + 1];
@@ -343,7 +364,7 @@
     document.getElementById('view-field-badge').classList.toggle('hidden', !hasUpgradableDefense());
   }
 
-  function appendDefenseRow({ name, desc, maxed, cost, onBuy }) {
+  function appendDefenseRow({ name, desc, maxed, cost, costLabel, onBuy, deferred = false }) {
     const row = document.createElement('div');
     row.className = 'shop-item';
     row.innerHTML = `
@@ -351,14 +372,18 @@
         <div class="shop-item-name">${name}${maxed ? ' (MAX)' : ''}</div>
         <div class="shop-item-desc">${desc}</div>
       </div>
-      <button class="shop-item-buy" ${maxed ? 'disabled' : ''}>${maxed ? 'MAX' : cost + 'g'}</button>
+      <button class="shop-item-buy" ${maxed ? 'disabled' : ''}>${maxed ? 'MAX' : (costLabel || cost + 'g')}</button>
     `;
     const btn = row.querySelector('button');
     btn.disabled = btn.disabled || gold < cost;
     btn.addEventListener('click', () => {
       if (gold < cost || maxed) return;
-      audio.purchase();
-      gold -= cost;
+      // Deferred rows (fence draw mode) don't charge here — payment happens per segment as the
+      // drag is committed, since the final price isn't known until then.
+      if (!deferred) {
+        audio.purchase();
+        gold -= cost;
+      }
       onBuy();
       updateHud();
       renderDefenseItems();
@@ -399,6 +424,7 @@
   function endPlacement() {
     placementMode = null;
     placementCursor = null;
+    fenceDraw = null;
     el.placementBar.classList.add('hidden');
     input.setSuspended(false);
     if (shopHidden) {
@@ -411,16 +437,83 @@
   }
 
   el.placementCancelBtn.addEventListener('click', () => {
-    if (!placementMode) return;
+    if (!placementMode && !fenceDraw) return;
     audio.buttonClick();
-    if (!placementMode.moving) {
+    if (placementMode && !placementMode.moving) {
       const tiers = placementMode.kind === 'fence' ? FENCE_TIERS : MINE_TIERS;
       gold += tiers[placementMode.tierIndex].cost; // refund — it was paid up front
     }
+    // fenceDraw needs no refund: gold is only ever spent on commit (see commitFenceDraw), never
+    // up front, so cancelling mid-drag (or before the first touch) simply spends nothing.
     endPlacement();
     updateHud();
     renderDefenseItems();
   });
+
+  // ---------- Drag-to-lay-a-run-of-fences ----------
+  function beginFenceDraw(tierIndex) {
+    fenceDraw = { tierIndex, start: null, end: null };
+    placementArmedAt = performance.now(); // reuses the same stray-tap guard as beginPlacement
+    el.shopOverlay.classList.add('hidden');
+    el.reopenShopBtn.classList.add('hidden');
+    el.fieldPrepPill.classList.add('hidden');
+    hideDefenseSelection();
+    el.placementBar.classList.remove('hidden');
+    el.placementRotateBtn.classList.add('hidden'); // orientation follows the drag direction, not manual rotation
+    const tier = FENCE_TIERS[tierIndex];
+    el.placementPrompt.textContent = `Press and drag along the battlefield to lay a run of ${tier.name} — ${tier.cost}g each.`;
+    input.setSuspended(true);
+  }
+
+  /** Pure preview/commit computation shared by the live drag ghost and the actual commit: walks
+   *  evenly-spaced candidate points (FENCE_WIDTH apart, so panels sit edge-to-edge with no gaps)
+   *  from start to end, skipping any that land somewhere invalid (an existing fence/mine, the
+   *  ward, or off-field — the run gets a gap there rather than aborting entirely) and stopping
+   *  once gold or the FENCE_MAX budget runs out, so a preview never promises more than the
+   *  player can actually afford to commit. */
+  function computeFenceLine(tierIndex, start, end) {
+    const tier = FENCE_TIERS[tierIndex];
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const lineLen = Math.hypot(dx, dy);
+    const spacing = FENCE_WIDTH;
+    const count = Math.max(1, Math.round(lineLen / spacing) + 1);
+    const rotation = -Math.atan2(dy, dx); // yawFromAngle convention — panel width runs along the drag
+    const maxAffordable = Math.floor(gold / tier.cost);
+    const maxByBudget = FENCE_MAX - defenseState.fencesPlaced;
+    const segments = [];
+    let placedCount = 0;
+    for (let i = 0; i < count; i++) {
+      const t = count === 1 ? 0 : i / (count - 1);
+      const x = start.x + dx * t;
+      const y = start.y + dy * t;
+      const valid = isValidPlacement(x, y, null);
+      const capped = placedCount >= maxAffordable || placedCount >= maxByBudget;
+      const affordable = valid && !capped;
+      segments.push({ x, y, valid, affordable });
+      if (affordable) placedCount += 1;
+      else if (valid) break; // hit the gold/budget cap — no point drawing further ghosts past it
+    }
+    return { segments, rotation, placedCount, totalCost: placedCount * tier.cost };
+  }
+
+  function commitFenceDraw() {
+    if (!fenceDraw || !fenceDraw.start) { fenceDraw = null; endPlacement(); return; }
+    const { tierIndex, start, end } = fenceDraw;
+    const { segments, rotation } = computeFenceLine(tierIndex, start, end);
+    let placed = 0;
+    for (const seg of segments) {
+      if (!seg.affordable) continue;
+      fences.push(new Fence(seg.x, seg.y, tierIndex, rotation));
+      defenseState.fencesPlaced += 1;
+      gold -= FENCE_TIERS[tierIndex].cost;
+      placed += 1;
+    }
+    if (placed > 0) audio.purchase(); // one confirm chime for the whole run, not per-segment spam
+    endPlacement();
+    updateHud();
+    renderDefenseItems();
+  }
 
   function isValidPlacement(x, y, ignore = null) {
     if (x < 26 || x > bounds.width - 26 || y < 26 || y > bounds.height - 26) return false;
@@ -481,12 +574,31 @@
   // ---------- Selecting a placed defense (to move or upgrade it) ----------
   // Only reachable during the shop/prep phase with the shop panel closed — closing the panel
   // is how the player switches from "spend gold" to "walk the field and rework what's already down".
+  /** Repairing costs a fraction of the tier's placement price proportional to what's actually
+   *  missing — patching a nearly-full fence is cheap, rebuilding one from near-zero HP costs
+   *  close to the full placement price. Only fences have ongoing health worth repairing; mines
+   *  are one-shot triggers with no health field at all. */
+  function repairCost(fence) {
+    const tier = FENCE_TIERS[fence.tierIndex];
+    const missingFrac = 1 - fence.health / fence.maxHealth;
+    return Math.max(1, Math.ceil(tier.cost * missingFrac));
+  }
+
   function selectDefense(kind, ref) {
     selectedDefense = { kind, ref };
     const tiers = kind === 'fence' ? FENCE_TIERS : MINE_TIERS;
     const tier = tiers[ref.tierIndex];
     el.defenseSelectTitle.textContent = `${tier.name} selected`;
     el.defenseSelectRotateBtn.classList.toggle('hidden', kind !== 'fence');
+
+    const canRepair = kind === 'fence' && ref.health < ref.maxHealth;
+    el.defenseSelectRepairBtn.classList.toggle('hidden', !canRepair);
+    if (canRepair) {
+      const cost = repairCost(ref);
+      el.defenseSelectRepairBtn.textContent = `Repair (${cost}g)`;
+      el.defenseSelectRepairBtn.disabled = gold < cost;
+    }
+
     const unlockedTierIndex = defenseState[kind === 'fence' ? 'fenceTier' : 'mineTier'];
     const canUpgrade = unlockedTierIndex > ref.tierIndex;
     el.defenseSelectUpgradeBtn.classList.toggle('hidden', !canUpgrade);
@@ -541,6 +653,19 @@
     ref.rotation = (ref.rotation + ROTATE_STEP) % (Math.PI * 2);
   });
 
+  el.defenseSelectRepairBtn.addEventListener('click', () => {
+    if (!selectedDefense || selectedDefense.kind !== 'fence') return;
+    const { ref } = selectedDefense;
+    if (ref.health >= ref.maxHealth) return;
+    const cost = repairCost(ref);
+    if (gold < cost) return;
+    audio.purchase();
+    gold -= cost;
+    ref.health = ref.maxHealth;
+    updateHud();
+    selectDefense('fence', ref); // refresh the bar — Repair hides now that it's full
+  });
+
   el.defenseSelectUpgradeBtn.addEventListener('click', () => {
     if (!selectedDefense) return;
     const { kind, ref } = selectedDefense;
@@ -569,6 +694,20 @@
   el.defenseSelectCloseBtn.addEventListener('click', () => { audio.buttonClick(); hideDefenseSelection(); });
 
   canvas.addEventListener('pointerdown', (e) => {
+    if (fenceDraw) {
+      // Same stray-tap guard as handlePlacementTap: the touch that hit the shop's "Buy" row can
+      // generate a follow-up pointerdown on the canvas an instant later, right after the overlay
+      // is hidden — ignore anything within a beat of arming.
+      if (performance.now() - placementArmedAt < 350) return;
+      const p = input.toCanvasSpace(e.clientX, e.clientY);
+      const ground = renderer3d.screenToGround(p.x, p.y);
+      if (ground) {
+        fenceDraw.start = ground;
+        fenceDraw.end = ground;
+        canvas.setPointerCapture(e.pointerId);
+      }
+      return;
+    }
     if (placementMode) {
       handlePlacementTap(e.clientX, e.clientY);
       return;
@@ -580,10 +719,22 @@
     }
   });
   canvas.addEventListener('pointermove', (e) => {
+    if (fenceDraw && fenceDraw.start) {
+      const p = input.toCanvasSpace(e.clientX, e.clientY);
+      const ground = renderer3d.screenToGround(p.x, p.y);
+      if (ground) fenceDraw.end = ground;
+      return;
+    }
     if (!placementMode) return;
     const p = input.toCanvasSpace(e.clientX, e.clientY);
     const ground = renderer3d.screenToGround(p.x, p.y);
     if (ground) placementCursor = ground;
+  });
+  canvas.addEventListener('pointerup', () => {
+    if (fenceDraw && fenceDraw.start) commitFenceDraw();
+  });
+  canvas.addEventListener('pointercancel', () => {
+    if (fenceDraw && fenceDraw.start) { fenceDraw = null; endPlacement(); }
   });
 
   function renderWeaponItems() {
@@ -836,6 +987,7 @@
       : { fenceTier: 0, mineTier: 0, fencesPlaced: fences.length, minesPlaced: mines.length };
     placementMode = null;
     placementCursor = null;
+    fenceDraw = null;
     invalidPlacementFlash = 0;
     damageFlash = 0;
     shopHidden = false;
@@ -1259,6 +1411,46 @@
     fx.restore();
   }
 
+  /** Live ghost preview for an in-progress fence drag: a short perpendicular line per candidate
+   *  segment (green if it'll actually be placed on release, red if it's blocked or past what's
+   *  affordable), plus the running count/cost in the placement-bar prompt so the player always
+   *  knows what release will commit before they let go. */
+  function drawFenceLinePreview() {
+    if (!fenceDraw || !fenceDraw.start) return;
+    const { tierIndex, start, end } = fenceDraw;
+    const { segments, rotation, placedCount, totalCost } = computeFenceLine(tierIndex, start, end);
+    const tier = FENCE_TIERS[tierIndex];
+    el.placementPrompt.textContent = placedCount > 0
+      ? `${placedCount} ${tier.name}${placedCount === 1 ? '' : 's'} — ${totalCost}g. Release to place.`
+      : 'No room (or gold) for a fence here — drag elsewhere, or release to cancel.';
+
+    const hw = FENCE_WIDTH / 2;
+    fx.save();
+    for (const seg of segments) {
+      const glow = seg.affordable ? 'rgba(120, 220, 140,' : 'rgba(220, 70, 70,';
+      const a = renderer3d.worldToScreen(seg.x + Math.cos(rotation) * hw, seg.y - Math.sin(rotation) * hw);
+      const b = renderer3d.worldToScreen(seg.x - Math.cos(rotation) * hw, seg.y + Math.sin(rotation) * hw);
+      fx.strokeStyle = `${glow} 0.9)`;
+      fx.lineWidth = 4;
+      fx.lineCap = 'round';
+      fx.beginPath();
+      fx.moveTo(a.x, a.y);
+      fx.lineTo(b.x, b.y);
+      fx.stroke();
+    }
+    // A single translucent slow-aura ring at the live end point (not one per segment — a whole
+    // run of them would just be visual noise) so the aura's reach is still visible while dragging.
+    const endPos = renderer3d.worldToScreen(end.x, end.y);
+    const r = screenRadiusAt(end.x, end.y, tier.slowRadius);
+    fx.strokeStyle = 'rgba(120, 220, 140, 0.5)';
+    fx.setLineDash([5, 4]);
+    fx.lineWidth = 1.5;
+    fx.beginPath();
+    fx.arc(endPos.x, endPos.y, r, 0, Math.PI * 2);
+    fx.stroke();
+    fx.restore();
+  }
+
   function drawInvalidPlacementFlash() {
     if (invalidPlacementFlash <= 0 || !placementCursor) return;
     const t = invalidPlacementFlash / 0.3;
@@ -1394,6 +1586,7 @@
     drawDamageNumbers();
     drawDefenseSelectionRing();
     drawPlacementPreview();
+    drawFenceLinePreview();
     drawInvalidPlacementFlash();
 
     if (state === 'playing') {
@@ -1503,6 +1696,12 @@
     }),
     debugBeginPlacement: (kind, tierIndex) => beginPlacement(kind, tierIndex),
     debugPlaceAt: (x, y) => placeAt(x, y),
+    debugBeginFenceDraw: (tierIndex) => beginFenceDraw(tierIndex),
+    debugFenceDragStart: (x, y) => { if (fenceDraw) { fenceDraw.start = { x, y }; fenceDraw.end = { x, y }; } },
+    debugFenceDragTo: (x, y) => { if (fenceDraw && fenceDraw.start) fenceDraw.end = { x, y }; },
+    debugFenceDragCommit: () => commitFenceDraw(),
+    debugComputeFenceLine: (tierIndex, start, end) => computeFenceLine(tierIndex, start, end),
+    debugFenceDrawState: () => (fenceDraw ? { ...fenceDraw } : null),
     debugSetPrepCountdown: (s) => { prepCountdown = s; },
     debugSetWaveClearTimer: (s) => { waveClearTimer = s; },
     debugViewField: () => el.viewFieldBtn.click(),
@@ -1511,6 +1710,8 @@
     debugMoveSelected: () => el.defenseSelectMoveBtn.click(),
     debugUpgradeSelected: () => el.defenseSelectUpgradeBtn.click(),
     debugRotateSelected: () => el.defenseSelectRotateBtn.click(),
+    debugRepairSelected: () => el.defenseSelectRepairBtn.click(),
+    debugDamageFence: (idx, amount) => { fences[idx].health = Math.max(0, fences[idx].health - amount); },
     debugRotatePlacement: () => el.placementRotateBtn.click(),
     debugWorldToScreen: (x, y, height = 0) => renderer3d.worldToScreen(x, y, height),
     debugAudioState: () => ({ ctxState: audio.ctx ? audio.ctx.state : 'not created', muted: audio.muted }),
