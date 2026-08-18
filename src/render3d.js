@@ -1747,7 +1747,9 @@ class Renderer3D {
       const fade = clamp(1 - bp.age / bp.maxAge, 0, 1);
       const spread = Math.min(1, bp.age / 1.2);
       v.mesh.position.set(this.worldX(bp.x), 0.15, this.worldZ(bp.y));
-      v.mesh.scale.setScalar(10 * (0.4 + spread * 0.6));
+      // bp.scale carries the size of whatever died here (game.js passes victim.radius / 12) —
+      // without it every pool reads the same size regardless of a vampire vs. a boss falling.
+      v.mesh.scale.setScalar(10 * (0.4 + spread * 0.6) * bp.scale);
       v.mat.opacity = 0.55 * fade;
     }
     for (const [bp, v] of this.bloodDecals) {

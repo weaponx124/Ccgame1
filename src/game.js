@@ -1694,6 +1694,7 @@
       if (state === 'shop') { renderShopItems(); renderWeaponItems(); renderDefenseItems(); }
     },
     debugSpawn: (typeKey, x, y) => { enemies.push(new Enemy(x, y, typeKey, 1)); },
+    debugFireBulletAt: (x, y, damage) => { bullets.push(new Bullet(x, y, 0, 0, damage, false, 0, 'crossbow')); },
     debugSetAbilityCooldown: (enemyIdx, s) => { enemies[enemyIdx]._abilityCooldown = s; },
     debugSetEnemyTargetPreference: (idx, pref) => { enemies[idx].targetPreference = pref; },
     debugSetWaveNumber: (n) => { waveManager.waveNumber = n; },
@@ -1738,6 +1739,10 @@
     debugComputeFenceLine: (tierIndex, start, end) => computeFenceLine(tierIndex, start, end),
     debugFenceDrawState: () => (fenceDraw ? { ...fenceDraw } : null),
     debugSnapToNearbyFence: (x, y) => snapToNearbyFence({ x, y }),
+    debugBloodPoolScales: () => bloodPools.map((bp) => {
+      const v = renderer3d.bloodDecals.get(bp);
+      return { sourceScale: bp.scale, meshScale: v ? v.mesh.scale.x : null };
+    }),
     debugSetPrepCountdown: (s) => { prepCountdown = s; },
     debugSetWaveClearTimer: (s) => { waveClearTimer = s; },
     debugViewField: () => el.viewFieldBtn.click(),

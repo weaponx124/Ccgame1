@@ -134,14 +134,12 @@ class Bullet {
   constructor(x, y, angle, speed, damage, isCrit = false, pierce = 0, weaponType = 'crossbow') {
     this.x = x;
     this.y = y;
-    this.angle = angle; // kept for rendering (arrow/bolt shaft orientation), not just vx/vy
     this.vx = Math.cos(angle) * speed;
     this.vy = Math.sin(angle) * speed;
     this.radius = isCrit ? 5 : 4;
     this.damage = damage;
     this.isCrit = isCrit;
     this.pierceRemaining = pierce;
-    this.isPiercing = pierce > 0;
     this.weaponType = weaponType; // which weapon fired it, so its visual can match (arrow/bullet/chakram)
     this.hitEnemies = new Set();
     this.alive = true;
