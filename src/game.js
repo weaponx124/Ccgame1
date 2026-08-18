@@ -81,6 +81,11 @@
     defenseSelectRotateBtn: document.getElementById('defense-select-rotate-btn'),
     defenseSelectUpgradeBtn: document.getElementById('defense-select-upgrade-btn'),
     defenseSelectCloseBtn: document.getElementById('defense-select-close-btn'),
+    marksAmount: document.getElementById('marks-amount'),
+    loadoutItems: document.getElementById('loadout-items'),
+    checkpointSection: document.getElementById('checkpoint-section'),
+    checkpointItems: document.getElementById('checkpoint-items'),
+    marksEarned: document.getElementById('marks-earned'),
   };
 
   // ---------- Game state ----------
@@ -100,6 +105,101 @@
   let waveClearTimer; // seconds remaining showing the "Wave Cleared" banner before the shop opens
   let gold;
 
+  // ---------- Meta-progression (persists across runs, independent of the mid-run save) ----------
+  let meta = loadMeta();
+  let selectedStartWeapon = 'crossbow'; // chosen on the start screen; must be in meta.unlockedLoadouts
+  let selectedStartMode = 'fresh'; // 'fresh' | 'checkpoint' — which start-screen option is active
+
+  /** The highest wave checkpoint unlocked so far (by clearing a boss wave), or null if none yet. */
+  function highestCheckpoint() {
+    return meta.unlockedCheckpoints.length ? Math.max(...meta.unlockedCheckpoints) : null;
+  }
+
+  /** Deterministic starting-gold stipend for a checkpoint start: the sum of wave-clear bonuses
+   *  the player would have banked clearing waves 1..clearedThroughWave, so a checkpoint run
+   *  starts geared roughly like a run that actually played through to that point — without
+   *  touching enemy scaling, which is already a pure function of wave number. Kill-reward gold
+   *  is deliberately excluded since it varies by play, so this is a floor, not an estimate. */
+  function checkpointStipend(clearedThroughWave) {
+    let total = 0;
+    for (let i = 1; i <= clearedThroughWave; i++) total += 10 + i * 2;
+    return total;
+  }
+
+  function renderMetaPanel() {
+    el.marksAmount.textContent = meta.marks;
+
+    el.loadoutItems.innerHTML = '';
+    for (const id of WEAPON_ORDER) {
+      const weapon = WEAPON_TYPES[id];
+      const owned = meta.unlockedLoadouts.includes(id);
+      const selected = selectedStartWeapon === id;
+      const row = document.createElement('div');
+      row.className = 'shop-item' + (selected ? ' selected' : '');
+      row.innerHTML = `
+        <div class="shop-item-info">
+          <div class="shop-item-name">${weapon.name}${selected ? ' (Selected)' : ''}</div>
+          <div class="shop-item-desc">${weapon.desc}</div>
+        </div>
+        <button class="shop-item-buy">${owned ? (selected ? 'Selected' : 'Select') : weapon.startUnlockCost + ' marks'}</button>
+      `;
+      const btn = row.querySelector('button');
+      if (selected) {
+        btn.disabled = true;
+      } else if (!owned) {
+        btn.disabled = meta.marks < weapon.startUnlockCost;
+      }
+      btn.addEventListener('click', () => {
+        if (selected) return;
+        if (!owned) {
+          if (meta.marks < weapon.startUnlockCost) return;
+          meta.marks -= weapon.startUnlockCost;
+          meta.unlockedLoadouts.push(id);
+          saveMeta(meta);
+        }
+        audio.buttonClick();
+        selectedStartWeapon = id;
+        renderMetaPanel();
+      });
+      el.loadoutItems.appendChild(row);
+    }
+
+    const checkpoint = highestCheckpoint();
+    el.checkpointSection.classList.toggle('hidden', !checkpoint);
+    el.checkpointItems.innerHTML = '';
+    if (checkpoint) {
+      const options = [
+        { mode: 'fresh', name: 'Fresh Start', desc: 'Begin at wave 1, no stipend.' },
+        {
+          mode: 'checkpoint',
+          name: `Skip to Wave ${checkpoint}`,
+          desc: `Unlocked by clearing wave ${checkpoint - 1}. Starts geared with a ${checkpointStipend(checkpoint - 1)}g stipend.`,
+        },
+      ];
+      for (const opt of options) {
+        const selected = selectedStartMode === opt.mode;
+        const row = document.createElement('div');
+        row.className = 'shop-item' + (selected ? ' selected' : '');
+        row.innerHTML = `
+          <div class="shop-item-info">
+            <div class="shop-item-name">${opt.name}${selected ? ' (Selected)' : ''}</div>
+            <div class="shop-item-desc">${opt.desc}</div>
+          </div>
+          <button class="shop-item-buy" ${selected ? 'disabled' : ''}>${selected ? 'Selected' : 'Choose'}</button>
+        `;
+        row.querySelector('button').addEventListener('click', () => {
+          if (selected) return;
+          audio.buttonClick();
+          selectedStartMode = opt.mode;
+          renderMetaPanel();
+        });
+        el.checkpointItems.appendChild(row);
+      }
+    } else {
+      selectedStartMode = 'fresh';
+    }
+  }
+
   function setPauseButtonVisible(visible) {
     el.pauseBtn.classList.toggle('hidden', !visible);
     el.weaponSwitchBtn.classList.toggle('hidden', !visible);
@@ -113,7 +213,13 @@
   });
 
   function resetGame() {
+    const useCheckpoint = selectedStartMode === 'checkpoint' && highestCheckpoint();
+    const startWave = useCheckpoint ? highestCheckpoint() - 1 : 0;
+    const startWeapon = meta.unlockedLoadouts.includes(selectedStartWeapon) ? selectedStartWeapon : 'crossbow';
+
     player = new Player(bounds.width / 2, bounds.height / 2 + 120);
+    player.unlockedWeapons = [startWeapon];
+    player.equippedWeapon = startWeapon;
     base = new Base(bounds.width / 2, bounds.height / 2);
     waveManager = new WaveManager(bounds);
     shop = new Shop();
@@ -136,9 +242,9 @@
     el.defenseSelectBar.classList.add('hidden');
     el.reopenShopBtn.classList.add('hidden');
     el.fieldPrepPill.classList.add('hidden');
-    gold = 20; // enough for one small early purchase (a fence, a mine, or a cheap upgrade)
+    gold = 20 + (useCheckpoint ? checkpointStipend(startWave) : 0); // base stake, plus checkpoint stipend if skipping ahead
     state = 'shop';
-    waveManager.waveNumber = 0; // startNextWave will bump to 1
+    waveManager.waveNumber = startWave; // startNextWave will bump this to startWave + 1
     openShop(true);
   }
 
@@ -602,6 +708,7 @@
     const hasSave = !!loadGame();
     el.continueBtn.classList.toggle('hidden', !hasSave);
     el.startBtn.textContent = hasSave ? 'New Game' : 'Start Game';
+    renderMetaPanel();
   }
 
   el.weaponSwitchBtn.addEventListener('click', () => {
@@ -972,6 +1079,15 @@
       audio.gameOver();
       state = 'gameover';
       el.finalWave.textContent = waveManager.waveNumber;
+      const marksEarned = Math.max(0, waveManager.waveNumber - 1); // waves actually cleared, not the one in progress
+      if (marksEarned > 0) {
+        meta.marks += marksEarned;
+        saveMeta(meta);
+        el.marksEarned.textContent = `+${marksEarned} Marks earned`;
+        el.marksEarned.classList.remove('hidden');
+      } else {
+        el.marksEarned.classList.add('hidden');
+      }
       el.gameoverOverlay.classList.remove('hidden');
       setPauseButtonVisible(false);
       clearSave();
@@ -1000,6 +1116,13 @@
     } else if (waveManager.isWaveCleared(enemies.length)) {
       audio.waveClear();
       gold += 10 + waveManager.waveNumber * 2; // wave-clear bonus, on top of per-kill gold
+      if (waveManager.isBossWave(waveManager.waveNumber)) {
+        const nextCheckpoint = waveManager.waveNumber + 1;
+        if (!meta.unlockedCheckpoints.includes(nextCheckpoint)) {
+          meta.unlockedCheckpoints.push(nextCheckpoint);
+          saveMeta(meta);
+        }
+      }
       waveClearTimer = WAVE_CLEAR_DELAY;
       el.waveClearBanner.classList.remove('hidden');
       updateWaveClearBannerUI();
@@ -1365,6 +1488,18 @@
         hipL: { x: v.hipL.rotation.x, z: v.hipL.rotation.z },
         hipR: { x: v.hipR.rotation.x, z: v.hipR.rotation.z },
       };
+    },
+    debugMetaState: () => ({ ...meta, unlockedLoadouts: [...meta.unlockedLoadouts], unlockedCheckpoints: [...meta.unlockedCheckpoints], selectedStartWeapon, selectedStartMode }),
+    debugSetMeta: (patch) => { Object.assign(meta, patch); saveMeta(meta); renderMetaPanel(); },
+    debugSelectStartWeapon: (id) => { selectedStartWeapon = id; renderMetaPanel(); },
+    debugSelectStartMode: (mode) => { selectedStartMode = mode; renderMetaPanel(); },
+    debugClickLoadout: (id) => {
+      const idx = WEAPON_ORDER.indexOf(id);
+      el.loadoutItems.children[idx].querySelector('button').click();
+    },
+    debugClickCheckpointOption: (mode) => {
+      const idx = mode === 'fresh' ? 0 : 1;
+      el.checkpointItems.children[idx].querySelector('button').click();
     },
   };
 })();

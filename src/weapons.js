@@ -20,6 +20,7 @@ const WEAPON_TYPES = {
     shortName: 'Blunderbuss',
     desc: '3-shard spread; short range, wide punch.',
     unlockCost: 60,
+    startUnlockCost: 15, // Marks cost to make this a selectable starting weapon (meta-progression)
     damageMult: 0.5,
     fireRateMult: 0.7,
     bulletSpeedMult: 0.85,
@@ -32,6 +33,7 @@ const WEAPON_TYPES = {
     shortName: 'Chakram',
     desc: 'Slow spinning throw that cuts through the horde.',
     unlockCost: 90,
+    startUnlockCost: 25, // Marks cost to make this a selectable starting weapon (meta-progression)
     damageMult: 1.8,
     fireRateMult: 0.45,
     bulletSpeedMult: 0.75,

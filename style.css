@@ -562,11 +562,30 @@ html, body {
   50% { transform: scale(1.25); opacity: 0.7; }
 }
 
-#shop-items, #weapon-items {
+#shop-items, #weapon-items, #loadout-items, #checkpoint-items {
   display: flex;
   flex-direction: column;
   gap: 10px;
   margin: 18px 0;
+}
+
+#meta-panel {
+  text-align: left;
+  margin-top: 4px;
+}
+
+#meta-marks {
+  text-align: center;
+  font-family: var(--font-display);
+  color: var(--gold-bright);
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  margin-top: 14px;
+}
+
+.shop-item.selected {
+  border-color: var(--gold-bright);
+  box-shadow: 0 0 0 1px var(--gold-bright) inset;
 }
 
 .shop-section-title {

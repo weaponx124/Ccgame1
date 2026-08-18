@@ -11,7 +11,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260817l">
+<link rel="stylesheet" href="style.css?v=20260818a">
 </head>
 <body>
   <div id="rotate-overlay">
@@ -112,6 +112,7 @@
       <div id="gameover-panel">
         <h1>The Ward Has Fallen</h1>
         <p>You held the line through wave <span id="final-wave">1</span>.</p>
+        <p id="marks-earned" class="hidden"></p>
         <button id="restart-btn">Restart</button>
       </div>
     </div>
@@ -135,6 +136,15 @@
           <li><b>Right thumb</b> — drag to aim &amp; fire</li>
           <li class="controls-list-desktop"><b>WASD/mouse</b> — desktop fallback</li>
         </ul>
+        <div id="meta-panel">
+          <div id="meta-marks">Marks: <span id="marks-amount">0</span></div>
+          <h3 class="shop-section-title">Starting Weapon</h3>
+          <div id="loadout-items"></div>
+          <div id="checkpoint-section" class="hidden">
+            <h3 class="shop-section-title">Starting Point</h3>
+            <div id="checkpoint-items"></div>
+          </div>
+        </div>
         <div id="start-actions">
           <button id="continue-btn" class="hidden">Continue</button>
           <button id="start-btn">Start Game</button>
@@ -145,17 +155,17 @@
   </div>
 
   <script src="src/vendor/three.min.js"></script>
-  <script src="src/vector.js?v=20260817l"></script>
-  <script src="src/input.js?v=20260817l"></script>
-  <script src="src/weapons.js?v=20260817l"></script>
-  <script src="src/defenses.js?v=20260817l"></script>
-  <script src="src/effects.js?v=20260817l"></script>
-  <script src="src/entities.js?v=20260817l"></script>
-  <script src="src/waves.js?v=20260817l"></script>
-  <script src="src/shop.js?v=20260817l"></script>
-  <script src="src/save.js?v=20260817l"></script>
-  <script src="src/audio.js?v=20260817l"></script>
-  <script src="src/render3d.js?v=20260817l"></script>
-  <script src="src/game.js?v=20260817l"></script>
+  <script src="src/vector.js?v=20260818a"></script>
+  <script src="src/input.js?v=20260818a"></script>
+  <script src="src/weapons.js?v=20260818a"></script>
+  <script src="src/defenses.js?v=20260818a"></script>
+  <script src="src/effects.js?v=20260818a"></script>
+  <script src="src/entities.js?v=20260818a"></script>
+  <script src="src/waves.js?v=20260818a"></script>
+  <script src="src/shop.js?v=20260818a"></script>
+  <script src="src/save.js?v=20260818a"></script>
+  <script src="src/audio.js?v=20260818a"></script>
+  <script src="src/render3d.js?v=20260818a"></script>
+  <script src="src/game.js?v=20260818a"></script>
 </body>
 </html>
