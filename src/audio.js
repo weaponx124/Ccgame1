@@ -325,10 +325,25 @@ class AudioManager {
     this._tone({ freq: 59, freqEnd: 41, duration: 0.7, type: 'sawtooth', gain: 0.15, detune: 11, distort: 6, reverb: 0.4 });
   }
 
+  wraithMoan() {
+    if (!this._allow('wraithVoice', 2500)) return;
+    this._tone({ freq: 900, freqEnd: 500, duration: 0.5, type: 'sine', gain: 0.08, jitter: 0.12, reverb: 0.42 });
+    this._burst({ duration: 0.28, gain: 0.12, filterType: 'highpass', filterFreq: 4500, jitter: 0.1, reverb: 0.32 });
+  }
+
+  alphaRoar() {
+    if (!this._allow('alphaVoice', 2500)) return;
+    this._tone({ freq: 70, freqEnd: 48, duration: 0.55, type: 'sawtooth', gain: 0.2, distort: 6, jitter: 0.08, reverb: 0.35 });
+    this._tone({ freq: 69, freqEnd: 47, duration: 0.55, type: 'sawtooth', gain: 0.15, detune: 12, distort: 6, reverb: 0.35 });
+    this._burst({ duration: 0.22, gain: 0.12, filterType: 'bandpass', filterFreq: 700, q: 2, reverb: 0.3 });
+  }
+
   monsterVoice(typeKey) {
     if (typeKey === 'vampire') this.vampireHiss();
     else if (typeKey === 'werewolf') this.werewolfGrowl();
     else if (typeKey === 'revenant') this.revenantGroan();
+    else if (typeKey === 'wraith') this.wraithMoan();
+    else if (typeKey === 'alpha') this.alphaRoar();
     else this.zombieGroan();
   }
 
@@ -346,6 +361,23 @@ class AudioManager {
     this._burst({ duration: 0.35, gain: 0.45, filterType: 'lowpass', filterFreq: 2200, filterFreqEnd: 120, distort: 9, reverb: 0.35 });
     this._tone({ freq: 55, freqEnd: 22, duration: 0.4, type: 'sine', gain: 0.4, distort: 5, reverb: 0.35 });
     this._tone({ freq: 56, freqEnd: 23, duration: 0.4, type: 'sawtooth', gain: 0.16, detune: 9, distort: 5, reverb: 0.35 });
+  }
+
+  // A bright rising-then-collapsing shimmer instead of a low-end thud — reads as a teleport
+  // snap, distinct from the revenant's slam and the alpha's howl.
+  wraithBlink() {
+    this._duck(0.3, 30, 300);
+    this._tone({ freq: 1800, freqEnd: 300, duration: 0.22, type: 'sine', gain: 0.28, reverb: 0.4 });
+    this._tone({ freq: 2200, freqEnd: 260, duration: 0.22, type: 'triangle', gain: 0.16, delay: 0.02, reverb: 0.4 });
+    this._burst({ duration: 0.18, gain: 0.3, filterType: 'highpass', filterFreq: 2000, distort: 3, reverb: 0.35 });
+  }
+
+  // A rising howl sweep to cue the summon, distinct from both other boss abilities.
+  alphaHowl() {
+    this._duck(0.3, 60, 500);
+    this._tone({ freq: 300, freqEnd: 700, duration: 0.9, type: 'sawtooth', gain: 0.22, distort: 3, reverb: 0.5 });
+    this._tone({ freq: 302, freqEnd: 705, duration: 0.9, type: 'sawtooth', gain: 0.14, detune: 10, reverb: 0.5 });
+    this._burst({ duration: 0.3, gain: 0.14, filterType: 'bandpass', filterFreq: 1200, q: 1.5, delay: 0.1, reverb: 0.45 });
   }
 
   // ---------- Economy / UI ----------

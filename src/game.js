@@ -56,8 +56,10 @@
     muteBtn: document.getElementById('mute-btn'),
     fpsCounter: document.getElementById('fps-counter'),
     bossHealthBar: document.getElementById('boss-health-bar'),
+    bossHealthName: document.getElementById('boss-health-name'),
     bossHealthFill: document.getElementById('boss-health-fill'),
     bossWarning: document.getElementById('boss-warning'),
+    bossWarningName: document.getElementById('boss-warning-name'),
     bossWarningSecs: document.getElementById('boss-warning-secs'),
     pauseOverlay: document.getElementById('pause-overlay'),
     resumeBtn: document.getElementById('resume-btn'),
@@ -877,13 +879,19 @@
 
     const boss = enemies.find((e) => e.isBoss && e.alive);
     el.bossHealthBar.classList.toggle('hidden', !boss);
-    if (boss) el.bossHealthFill.style.width = clamp(boss.health / boss.maxHealth, 0, 1) * 100 + '%';
+    if (boss) {
+      el.bossHealthName.textContent = BOSS_DISPLAY_NAMES[boss.bossType];
+      el.bossHealthFill.style.width = clamp(boss.health / boss.maxHealth, 0, 1) * 100 + '%';
+    }
 
     // Advance warning so a boss wave doesn't feel like it ambushes the player mid-fight — shown
     // only up until the boss actually spawns, at which point the health bar above takes over.
     const secsUntilBoss = boss ? null : waveManager.secondsUntilBoss();
     el.bossWarning.classList.toggle('hidden', secsUntilBoss === null);
-    if (secsUntilBoss !== null) el.bossWarningSecs.textContent = Math.ceil(secsUntilBoss);
+    if (secsUntilBoss !== null) {
+      el.bossWarningName.textContent = BOSS_DISPLAY_NAMES[waveManager.upcomingBossType()];
+      el.bossWarningSecs.textContent = Math.ceil(secsUntilBoss);
+    }
 
     const weapon = WEAPON_TYPES[player.equippedWeapon];
     el.weaponSwitchBtn.textContent = player.unlockedWeapons.length > 1
@@ -964,29 +972,67 @@
       enemy.update(dt, target, speedMult);
 
       if (enemy.isBoss) {
-        // A boss doesn't land regular single-target contact damage at all — its only attack is
-        // this slower, much heavier area slam, which can land on the player, the ward, and any
-        // fences simultaneously if they're all in range, instead of just whichever one it happens
-        // to be touching.
-        if (enemy._slamCooldown <= 0) {
-          const hitsPlayer = dist(enemy.x, enemy.y, player.x, player.y) <= REVENANT_SLAM_RADIUS + player.radius;
-          const hitsBase = dist(enemy.x, enemy.y, base.x, base.y) <= REVENANT_SLAM_RADIUS + base.radius;
-          if (hitsPlayer || hitsBase) {
-            if (hitsPlayer) { player.takeDamage(enemy.damage); damageFlash = Math.min(1, damageFlash + 0.5); }
-            if (hitsBase) { base.takeDamage(enemy.damage); damageFlash = Math.min(1, damageFlash + 0.35); }
-            for (const fence of fences) {
-              if (fence.alive && dist(enemy.x, enemy.y, fence.x, fence.y) <= REVENANT_SLAM_RADIUS + fence.radius) {
-                fence.takeDamage(enemy.damage * 2);
+        // Each boss has one special ability on its own cooldown instead of (or, for the alpha,
+        // in addition to) regular single-target contact damage — see entities.js's
+        // BOSS_ABILITY_INTERVAL comment for why these three read as distinct fight patterns.
+        if (enemy._abilityCooldown <= 0) {
+          if (enemy.bossType === 'revenant') {
+            // AOE slam: can land on the player, the ward, and any fences simultaneously if
+            // they're all in range, instead of just whichever one it happens to be touching.
+            const hitsPlayer = dist(enemy.x, enemy.y, player.x, player.y) <= REVENANT_SLAM_RADIUS + player.radius;
+            const hitsBase = dist(enemy.x, enemy.y, base.x, base.y) <= REVENANT_SLAM_RADIUS + base.radius;
+            if (hitsPlayer || hitsBase) {
+              if (hitsPlayer) { player.takeDamage(enemy.damage); damageFlash = Math.min(1, damageFlash + 0.5); }
+              if (hitsBase) { base.takeDamage(enemy.damage); damageFlash = Math.min(1, damageFlash + 0.35); }
+              for (const fence of fences) {
+                if (fence.alive && dist(enemy.x, enemy.y, fence.x, fence.y) <= REVENANT_SLAM_RADIUS + fence.radius) {
+                  fence.takeDamage(enemy.damage * 2);
+                }
               }
+              explosions.push(new Explosion(enemy.x, enemy.y, REVENANT_SLAM_RADIUS));
+              audio.bossSlam();
+              enemy._abilityCooldown = REVENANT_SLAM_INTERVAL;
+            } else {
+              enemy._abilityCooldown = 0.3; // nothing in range yet — recheck soon rather than waiting a full interval
             }
-            explosions.push(new Explosion(enemy.x, enemy.y, REVENANT_SLAM_RADIUS));
-            audio.bossSlam();
-            enemy._slamCooldown = REVENANT_SLAM_INTERVAL;
-          } else {
-            enemy._slamCooldown = 0.3; // nothing in range yet — recheck again soon rather than waiting a full interval
+          } else if (enemy.bossType === 'wraith') {
+            // Blink strike: teleports into melee range of its current target and lands one heavy
+            // hit — an ambush that threatens from anywhere on the field, not just up close.
+            if (dist(enemy.x, enemy.y, target.x, target.y) <= WRAITH_BLINK_RANGE) {
+              const angleToTarget = Math.atan2(target.y - enemy.y, target.x - enemy.x);
+              const landDist = (target.radius || 0) + enemy.radius + 4;
+              enemy.x = target.x - Math.cos(angleToTarget) * landDist;
+              enemy.y = target.y - Math.sin(angleToTarget) * landDist;
+              enemy.angle = angleToTarget;
+              const hitsPlayer = dist(enemy.x, enemy.y, player.x, player.y) <= WRAITH_BLINK_STRIKE_RADIUS + player.radius;
+              const hitsBase = dist(enemy.x, enemy.y, base.x, base.y) <= WRAITH_BLINK_STRIKE_RADIUS + base.radius;
+              if (hitsPlayer) { player.takeDamage(enemy.damage); damageFlash = Math.min(1, damageFlash + 0.5); }
+              if (hitsBase) { base.takeDamage(enemy.damage); damageFlash = Math.min(1, damageFlash + 0.35); }
+              explosions.push(new Explosion(enemy.x, enemy.y, WRAITH_BLINK_STRIKE_RADIUS));
+              audio.wraithBlink();
+              enemy._abilityCooldown = WRAITH_BLINK_INTERVAL;
+            } else {
+              enemy._abilityCooldown = 0.3;
+            }
+          } else if (enemy.bossType === 'alpha') {
+            // Summons a pack of regular werewolves, capped so a long fight can't snowball into a
+            // swarm. Its own threat is the normal melee contact damage below (it doesn't
+            // `continue` past this block), so the fight is "grind through reinforcements while
+            // focusing the alpha" rather than a purely ranged pattern like the other two bosses.
+            const packSize = enemies.filter((e) => !e.isBoss && e.alive).length;
+            if (packSize < ALPHA_SUMMON_MAX_ACTIVE) {
+              for (let i = 0; i < ALPHA_SUMMON_COUNT; i++) {
+                const a = Math.random() * Math.PI * 2;
+                const sx = clamp(enemy.x + Math.cos(a) * 40, enemy.radius, bounds.width - enemy.radius);
+                const sy = clamp(enemy.y + Math.sin(a) * 40, enemy.radius, bounds.height - enemy.radius);
+                enemies.push(new Enemy(sx, sy, 'werewolf', waveManager.waveScale || 1));
+              }
+              audio.alphaHowl();
+            }
+            enemy._abilityCooldown = ALPHA_SUMMON_INTERVAL;
           }
         }
-        continue;
+        if (enemy.bossType !== 'alpha') continue;
       }
 
       // Contact is sustained, not a one-shot suicide hit: an enemy that reaches the ward or the
@@ -1421,6 +1467,10 @@
       if (state === 'shop') { renderShopItems(); renderWeaponItems(); renderDefenseItems(); }
     },
     debugSpawn: (typeKey, x, y) => { enemies.push(new Enemy(x, y, typeKey, 1)); },
+    debugSetAbilityCooldown: (enemyIdx, s) => { enemies[enemyIdx]._abilityCooldown = s; },
+    debugSetWaveNumber: (n) => { waveManager.waveNumber = n; },
+    debugBossForWave: (n) => waveManager.bossForWave(n),
+    debugUpcomingBossType: () => waveManager.upcomingBossType(),
     debugForceWaveClear: () => { enemies = []; waveManager.spawnQueue = []; },
     debugSetPaused: (v) => { paused = v; },
     getState: () => ({
@@ -1428,7 +1478,7 @@
       paused,
       gold,
       wave: waveManager.waveNumber,
-      enemies: enemies.map((e) => ({ x: e.x, y: e.y, health: e.health, radius: e.radius, hitCenter: e.getHitCenter(), hitRadius: e.hitRadius, attackCooldown: e._attackCooldown, isMoving: e._isMoving, targetPreference: e.targetPreference })),
+      enemies: enemies.map((e) => ({ x: e.x, y: e.y, health: e.health, radius: e.radius, hitCenter: e.getHitCenter(), hitRadius: e.hitRadius, attackCooldown: e._attackCooldown, isMoving: e._isMoving, targetPreference: e.targetPreference, isBoss: e.isBoss, bossType: e.bossType, abilityCooldown: e._abilityCooldown })),
       bullets: bullets.map((b) => ({ x: b.x, y: b.y, vx: b.vx, vy: b.vy, radius: b.radius, pierceRemaining: b.pierceRemaining, weaponType: b.weaponType })),
       player: {
         x: player.x,

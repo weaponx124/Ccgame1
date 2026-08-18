@@ -1,6 +1,11 @@
 // Wave spawning logic: defines what enemies appear on each wave and paces their spawn timing.
 
-const BOSS_WAVE_INTERVAL = 5; // every 5th wave (5, 10, 15, ...) gets a revenant
+const BOSS_WAVE_INTERVAL = 5; // every 5th wave (5, 10, 15, ...) gets a boss
+
+// Which boss shows up on which boss-wave tier, rotating so wave 5/20/35... is always a revenant,
+// 10/25/40... a wraith, 15/30/45... an alpha — three distinct fight patterns instead of the same
+// boss repeating forever.
+const BOSS_ROTATION = ['revenant', 'wraith', 'alpha'];
 
 class WaveManager {
   constructor(bounds) {
@@ -13,6 +18,12 @@ class WaveManager {
 
   isBossWave(waveNumber) {
     return waveNumber > 0 && waveNumber % BOSS_WAVE_INTERVAL === 0;
+  }
+
+  /** Which boss type appears on a given boss wave — see BOSS_ROTATION above. */
+  bossForWave(waveNumber) {
+    const tier = waveNumber / BOSS_WAVE_INTERVAL;
+    return BOSS_ROTATION[(tier - 1) % BOSS_ROTATION.length];
   }
 
   /**
@@ -48,7 +59,7 @@ class WaveManager {
       // Appended last, after every regular enemy in the wave — the whole point is giving the
       // player the entire wave's worth of chaff-clearing time before the boss shows up at all,
       // instead of still having a field full of regular enemies to deal with when it arrives.
-      queue.push('revenant');
+      queue.push(this.bossForWave(waveNumber));
     }
 
     return { queue, waveScale };
@@ -95,9 +106,16 @@ class WaveManager {
    *  each spaced spawnInterval apart, plus whatever's left on the timer for the very next one. */
   secondsUntilBoss() {
     if (!this.active) return null;
-    const idx = this.spawnQueue.indexOf('revenant');
+    const idx = this.spawnQueue.findIndex((t) => BOSS_ROTATION.includes(t));
     if (idx === -1) return null;
     return this._spawnTimer + idx * this.spawnInterval;
+  }
+
+  /** Which boss type is queued up next, or null if none is coming this wave. Lets the HUD name
+   *  the incoming boss in the warning countdown instead of assuming it's always the revenant. */
+  upcomingBossType() {
+    if (!this.active) return null;
+    return this.spawnQueue.find((t) => BOSS_ROTATION.includes(t)) || null;
   }
 
   _randomEdgePoint() {

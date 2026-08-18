@@ -161,11 +161,40 @@ class Bullet {
 // so the visible swing roughly lines up with when damage actually lands.
 const ENEMY_ATTACK_INTERVAL = 0.8;
 
-// Boss (revenant) slam attack: a slower, much heavier area hit instead of the regular per-target
-// contact damage every other enemy uses — see game.js's boss branch in the contact-damage loop.
-// Shared with Renderer3D for the same "wind up and strike" animation timing as ENEMY_ATTACK_INTERVAL.
+// Boss abilities: each boss type gets one special attack on its own cooldown, handled in
+// game.js's boss branch of the contact-damage loop (not the regular per-target contact damage
+// every other enemy uses). BOSS_ABILITY_INTERVAL is shared with Renderer3D for the same
+// "wind up and strike" animation timing as ENEMY_ATTACK_INTERVAL, keyed generically off
+// whichever boss type is currently animating instead of one hardcoded constant.
+
+// Revenant: a slow, heavy area slam that can hit the player, the ward, and fences all at once.
 const REVENANT_SLAM_INTERVAL = 2.2;
 const REVENANT_SLAM_RADIUS = 70;
+
+// Wraith: teleports into melee range of its current target and lands one heavy strike — an
+// ambush rather than a slam, so it threatens from anywhere on the field, not just up close.
+const WRAITH_BLINK_INTERVAL = 3.2;
+const WRAITH_BLINK_RANGE = 260;
+const WRAITH_BLINK_STRIKE_RADIUS = 46;
+
+// Alpha: unlike the other two, it keeps its normal melee contact damage (ENEMY_ATTACK_INTERVAL,
+// ticked via the regular _attackCooldown below) — its special ability instead periodically
+// summons a pack of regular werewolves, capped so a long fight doesn't snowball into a swarm.
+const ALPHA_SUMMON_INTERVAL = 7.5;
+const ALPHA_SUMMON_COUNT = 2;
+const ALPHA_SUMMON_MAX_ACTIVE = 4;
+
+const BOSS_ABILITY_INTERVAL = {
+  revenant: REVENANT_SLAM_INTERVAL,
+  wraith: WRAITH_BLINK_INTERVAL,
+  alpha: ALPHA_SUMMON_INTERVAL,
+};
+
+const BOSS_DISPLAY_NAMES = {
+  revenant: 'The Revenant',
+  wraith: 'The Wraith',
+  alpha: 'The Alpha',
+};
 
 // preferBaseChance: how likely a freshly spawned enemy of this type is to head for the ward
 // instead of hunting the player — see the target-selection comment on Enemy for how this plays
@@ -196,9 +225,9 @@ const ENEMY_TYPES = {
     reward: 15,
     preferBaseChance: 0.5,
   },
-  // Appears alone, once, on boss waves (see WaveManager._buildWave) instead of mixed into the
-  // regular composition. Deals no regular per-target contact damage — its only attack is the
-  // slower, much heavier slam AOE (game.js's boss branch), so `damage` here is that slam's damage.
+  // Appears alone, once, on boss waves (see WaveManager._buildWave/bossForWave) instead of mixed
+  // into the regular composition. Deals no regular per-target contact damage — its only attack is
+  // the slower, much heavier slam AOE (game.js's boss branch), so `damage` here is that slam's damage.
   revenant: {
     radius: 26,
     speed: 35,
@@ -206,6 +235,26 @@ const ENEMY_TYPES = {
     damage: 32,
     reward: 80,
     preferBaseChance: 0.25,
+  },
+  // Fast and evasive rather than tanky — like the revenant, its only damage comes from its
+  // special ability (a teleport strike), not regular contact.
+  wraith: {
+    radius: 20,
+    speed: 95,
+    health: 480,
+    damage: 24,
+    reward: 85,
+    preferBaseChance: 0.15,
+  },
+  // The odd one out: keeps regular melee contact damage on top of its special ability (summoning
+  // werewolves), so it's a genuine brawler rather than a purely ranged/ambush threat.
+  alpha: {
+    radius: 30,
+    speed: 40,
+    health: 820,
+    damage: 26,
+    reward: 95,
+    preferBaseChance: 0.2,
   },
 };
 
@@ -233,10 +282,11 @@ class Enemy {
     // target is currently *much* closer than its preferred one.
     this.targetPreference = Math.random() < def.preferBaseChance ? 'base' : 'player';
 
-    this.isBoss = typeKey === 'revenant';
-    // A short head start rather than the full interval, so a boss that's already in slam range
+    this.isBoss = typeKey in BOSS_ABILITY_INTERVAL;
+    this.bossType = this.isBoss ? typeKey : null;
+    // A short head start rather than the full interval, so a boss that's already in range
     // the moment it arrives doesn't stand there doing nothing for a couple of seconds first.
-    this._slamCooldown = this.isBoss ? REVENANT_SLAM_INTERVAL * 0.4 : 0;
+    this._abilityCooldown = this.isBoss ? BOSS_ABILITY_INTERVAL[typeKey] * 0.4 : 0;
   }
 
   /**
@@ -275,7 +325,7 @@ class Enemy {
     }
     if (this._hitFlash > 0) this._hitFlash -= dt;
     if (this._attackCooldown > 0) this._attackCooldown -= dt;
-    if (this.isBoss) this._slamCooldown -= dt;
+    if (this.isBoss) this._abilityCooldown -= dt;
   }
 
   takeDamage(amount) {

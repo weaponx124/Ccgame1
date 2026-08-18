@@ -1150,10 +1150,154 @@ class Renderer3D {
     return { ...rig, weaponPivot };
   }
 
+  /** Boss #2: a bound, ethereal vampire-lord who fights by teleporting into melee range rather
+   *  than closing distance normally — the "corrupted spirit" reading (icy palette, tattered
+   *  ghost-cloak, dangling manacle) is what sells the ambush pattern before the player even sees
+   *  it blink. */
+  buildWraithModel() {
+    const rig = this._buildCreatureBase({
+      legLen: 32, legRadius: 3.6, torsoLen: 30, torsoRadius: 8, headRadius: 7,
+      skinColor: 0xc8d8dc, eyeColor: 0x40e0ff, limbColor: 0x1a2226, torsoColor: 0x1f2c30,
+      texturePattern: 'vein',
+    });
+
+    // A long, tattered ethereal cloak — bigger and more ragged than the regular vampire's cape,
+    // and semi-transparent to read as ghostly rather than solid cloth.
+    const cloakMat = new THREE.MeshStandardMaterial({ color: 0x0c1416, roughness: 0.8, side: THREE.DoubleSide, transparent: true, opacity: 0.85 });
+    const cloak = new THREE.Mesh(new THREE.ConeGeometry(16, 50, 7, 1, true), cloakMat);
+    cloak.position.set(0, rig.legLen + rig.torsoLen * 0.28, -6);
+    cloak.rotation.x = Math.PI;
+    cloak.castShadow = true;
+    rig.group.add(cloak);
+
+    // A tattered hood — echoes the hunter's, corrupted.
+    const hoodMat = new THREE.MeshStandardMaterial({ color: 0x111a1c, roughness: 0.85 });
+    const hood = new THREE.Mesh(new THREE.ConeGeometry(rig.headRadius * 1.15, rig.headRadius * 2.6, 7, 1, true), hoodMat);
+    hood.position.set(0, rig.headRadius * 0.55, -rig.headRadius * 0.3);
+    hood.rotation.x = Math.PI * 0.94;
+    rig.headGroup.add(hood);
+
+    // A broken manacle and chain dangling from one wrist — a bound spirit, not just a fast
+    // vampire, and the detail most likely to actually read at gameplay zoom given its motion.
+    const chainMat = new THREE.MeshStandardMaterial({ color: 0x5a6062, roughness: 0.4, metalness: 0.7 });
+    for (let i = 0; i < 4; i++) {
+      const link = new THREE.Mesh(Renderer3D._geo().cylinder, chainMat);
+      link.scale.set(0.7, 2.2, 0.7);
+      link.position.set(0, -rig.forearmLen - 3 - i * 2, 0);
+      link.rotation.z = i % 2 === 0 ? 0.5 : -0.5;
+      rig.elbowR.add(link);
+    }
+
+    // Long skeletal claws instead of ordinary hands.
+    const clawMat = new THREE.MeshStandardMaterial({ color: 0xe8f0f0 });
+    for (const elbow of [rig.elbowL, rig.elbowR]) {
+      for (const cx of [-1, 0, 1]) {
+        const claw = new THREE.Mesh(Renderer3D._geo().cone, clawMat);
+        claw.scale.set(0.6, 3.4, 0.6);
+        claw.position.set(cx * 1.1, -rig.forearmLen - 1, 1.6);
+        claw.rotation.x = Math.PI * 0.55;
+        elbow.add(claw);
+      }
+    }
+
+    return { ...rig, cloak };
+  }
+
+  /** Boss #3: a pack-leader werewolf — bigger, scarred, and maned, distinguished from the regular
+   *  werewolf far more than just scale. Unlike the other two bosses it keeps normal melee contact
+   *  damage (see game.js), so its silhouette needs to read as an immediate physical threat, not
+   *  just a caster standing off to the side. */
+  buildAlphaModel() {
+    const rig = this._buildCreatureBase({
+      legLen: 34, legRadius: 8.5, torsoLen: 44, torsoRadius: 17, headRadius: 11,
+      skinColor: 0x3c2c1c, eyeColor: 0xff5a18, limbColor: 0x241a10, torsoColor: 0x2e2014,
+      texturePattern: 'fur',
+    });
+
+    const earMat = new THREE.MeshStandardMaterial({ color: 0x140e08, roughness: 1 });
+    for (const ex of [-1, 1]) {
+      const ear = new THREE.Mesh(Renderer3D._geo().cone, earMat);
+      ear.scale.set(3.4, 8, 3.4);
+      ear.position.set(ex * 4.8, rig.legLen + rig.torsoLen + rig.headRadius * 1.5, -1);
+      rig.group.add(ear);
+    }
+
+    // A broader, heavier snout with a full set of fangs — the face needs to read as meaningfully
+    // more brutal than a regular werewolf's, not just bigger.
+    const snout = new THREE.Mesh(Renderer3D._geo().box, rig.headMat);
+    snout.scale.set(rig.headRadius * 0.58, rig.headRadius * 0.48, rig.headRadius * 1.05);
+    snout.position.set(0, -rig.headRadius * 0.14, rig.headRadius * 0.9);
+    rig.headGroup.add(snout);
+    const fangMat = new THREE.MeshStandardMaterial({ color: 0xf4eee0 });
+    for (const fx of [-1.5, -0.5, 0.5, 1.5]) {
+      const fang = new THREE.Mesh(Renderer3D._geo().cone, fangMat);
+      fang.scale.set(0.7, 2.4, 0.7);
+      fang.position.set(fx * rig.headRadius * 0.16, -rig.headRadius * 0.34, rig.headRadius * 1.15);
+      fang.rotation.x = Math.PI;
+      rig.headGroup.add(fang);
+    }
+
+    // A thick mane around the neck/shoulders — the single biggest "this is the pack leader" tell.
+    const maneMat = new THREE.MeshStandardMaterial({ color: 0x1c140c, roughness: 1 });
+    for (let i = 0; i < 7; i++) {
+      const a = (i / 7) * Math.PI * 2;
+      const spike = new THREE.Mesh(Renderer3D._geo().cone, maneMat);
+      spike.scale.set(2.1, 7, 2.1);
+      spike.position.set(Math.cos(a) * rig.torsoRadius * 0.9, rig.legLen + rig.torsoLen * 0.92, Math.sin(a) * rig.torsoRadius * 0.9);
+      spike.rotation.x = Math.cos(a) * 0.6;
+      spike.rotation.z = Math.sin(a) * -0.6;
+      rig.group.add(spike);
+    }
+
+    // Battle-scar gashes across the torso.
+    const scarMat = new THREE.MeshStandardMaterial({ color: 0x0c0806, roughness: 1 });
+    for (const [sx, sy] of [[-3, 0.55], [2, 0.68]]) {
+      const scar = new THREE.Mesh(Renderer3D._geo().box, scarMat);
+      scar.scale.set(0.8, 9, 0.6);
+      scar.position.set(sx, rig.legLen + rig.torsoLen * sy, rig.torsoRadius * 0.95);
+      scar.rotation.z = 0.4;
+      rig.group.add(scar);
+    }
+
+    // A trophy necklace of bone/tooth fragments — pack-leader flavor.
+    const boneMat = new THREE.MeshStandardMaterial({ color: 0xe8e0c8, roughness: 0.7 });
+    for (let i = 0; i < 5; i++) {
+      const a = -0.9 + i * 0.45;
+      const bone = new THREE.Mesh(Renderer3D._geo().cone, boneMat);
+      bone.scale.set(0.6, 2.2, 0.6);
+      bone.position.set(Math.sin(a) * rig.torsoRadius * 0.7, rig.legLen + rig.torsoLen + 1 - Math.cos(a) * 3, rig.torsoRadius * 0.85);
+      bone.rotation.x = Math.PI * 0.5;
+      rig.group.add(bone);
+    }
+
+    // Heavier claws on every limb than the regular werewolf's.
+    const clawMat = new THREE.MeshStandardMaterial({ color: 0xe8e0d0 });
+    for (const knee of [rig.kneeL, rig.kneeR]) {
+      const claw = new THREE.Mesh(Renderer3D._geo().cone, clawMat);
+      claw.scale.set(1.6, 4, 1.6);
+      claw.position.set(0, -rig.shinLen + 1, 3.4);
+      claw.rotation.x = Math.PI * 0.6;
+      knee.add(claw);
+    }
+    for (const elbow of [rig.elbowL, rig.elbowR]) {
+      for (const cx of [-1.6, 0, 1.6]) {
+        const claw = new THREE.Mesh(Renderer3D._geo().cone, clawMat);
+        claw.scale.set(1, 3, 1);
+        claw.position.set(cx, -rig.forearmLen - 1, 1.8);
+        claw.rotation.x = Math.PI * 0.55;
+        elbow.add(claw);
+      }
+    }
+
+    return rig;
+  }
+
   _buildByType(typeKey) {
     if (typeKey === 'vampire') return this.buildVampireModel();
     if (typeKey === 'werewolf') return this.buildWerewolfModel();
     if (typeKey === 'revenant') return this.buildRevenantModel();
+    if (typeKey === 'wraith') return this.buildWraithModel();
+    if (typeKey === 'alpha') return this.buildAlphaModel();
     return this.buildZombieModel();
   }
 
@@ -1430,7 +1574,8 @@ class Renderer3D {
       // Per-species baseline pose, layered under the shared swing/lunge animation below — this is
       // what makes a zombie shamble with arms out, a vampire stand tall and controlled, and a
       // werewolf carry a crouched, ready-to-pounce bend even before either one moves.
-      const kneeBase = e.typeKey === 'vampire' ? 0.04 : e.typeKey === 'werewolf' ? 0.24 : e.isBoss ? 0.16 : 0.12;
+      const kneeBase = e.typeKey === 'vampire' ? 0.04 : e.typeKey === 'werewolf' ? 0.24
+        : e.typeKey === 'wraith' ? 0.02 : e.typeKey === 'alpha' ? 0.26 : e.isBoss ? 0.16 : 0.12;
       const zombieReach = e.typeKey === 'zombie' ? 0.4 : 0;
 
       if (e._isMoving) {
@@ -1458,8 +1603,8 @@ class Renderer3D {
         // A boss winds up and strikes on its own, much slower slam timer instead of the regular
         // per-enemy attack interval — the swing this drives is bigger too (see below), so a slam
         // reads as a real haymaker instead of the same jab every other enemy throws.
-        const attackInterval = e.isBoss ? REVENANT_SLAM_INTERVAL : ENEMY_ATTACK_INTERVAL;
-        const cooldown = e.isBoss ? e._slamCooldown : e._attackCooldown;
+        const attackInterval = e.isBoss ? BOSS_ABILITY_INTERVAL[e.bossType] : ENEMY_ATTACK_INTERVAL;
+        const cooldown = e.isBoss ? e._abilityCooldown : e._attackCooldown;
         const windup = e.isBoss ? 0.6 : 0.3;
         const sinceAttack = attackInterval - cooldown;
         const lunge = sinceAttack >= 0 && sinceAttack < windup ? Math.sin((sinceAttack / windup) * Math.PI) : 0;
