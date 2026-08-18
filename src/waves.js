@@ -65,6 +65,18 @@ class WaveManager {
     return { queue, waveScale };
   }
 
+  /** Total gold a full clear of this wave actually pays out: every kill reward in its
+   *  composition plus the wave-clear bonus. The composition (counts per enemy type) is a pure
+   *  function of wave number — only the spawn *order* is randomized — so this total is exact,
+   *  not an estimate, and is what checkpoint-start stipends are built from (see game.js's
+   *  checkpointStipend) so skipping ahead hands over the gold a real clear would have earned. */
+  waveGoldValue(waveNumber) {
+    const { queue } = this._buildWave(waveNumber);
+    let total = 10 + waveNumber * 2; // wave-clear bonus
+    for (const typeKey of queue) total += ENEMY_TYPES[typeKey].reward;
+    return total;
+  }
+
   startNextWave() {
     this.waveNumber += 1;
     const { queue, waveScale } = this._buildWave(this.waveNumber);

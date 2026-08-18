@@ -117,14 +117,14 @@
     return meta.unlockedCheckpoints.length ? Math.max(...meta.unlockedCheckpoints) : null;
   }
 
-  /** Deterministic starting-gold stipend for a checkpoint start: the sum of wave-clear bonuses
-   *  the player would have banked clearing waves 1..clearedThroughWave, so a checkpoint run
-   *  starts geared roughly like a run that actually played through to that point — without
-   *  touching enemy scaling, which is already a pure function of wave number. Kill-reward gold
-   *  is deliberately excluded since it varies by play, so this is a floor, not an estimate. */
+  /** Starting-gold stipend for a checkpoint start: the exact gold a full clear of waves
+   *  1..clearedThroughWave actually pays out (every kill reward plus every wave-clear bonus —
+   *  see WaveManager.waveGoldValue), so a checkpoint run starts genuinely geared like a run that
+   *  played through to that point, without touching enemy scaling, which is already a pure
+   *  function of wave number. */
   function checkpointStipend(clearedThroughWave) {
     let total = 0;
-    for (let i = 1; i <= clearedThroughWave; i++) total += 10 + i * 2;
+    for (let i = 1; i <= clearedThroughWave; i++) total += waveManager.waveGoldValue(i);
     return total;
   }
 
