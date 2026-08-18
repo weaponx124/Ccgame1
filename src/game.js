@@ -1774,6 +1774,15 @@
       const v = renderer3d.bloodDecals.get(bp);
       return { sourceScale: bp.scale, meshScale: v ? v.mesh.scale.x : null };
     }),
+    debugBulletViews: () => bullets.map((b) => {
+      const v = renderer3d.bulletViews.get(b);
+      return {
+        weaponType: b.weaponType,
+        viewFound: !!v,
+        childCount: v ? v.group.children.length : null,
+        childGeoTypes: v ? v.group.children.map((c) => c.geometry ? c.geometry.type : c.type) : null,
+      };
+    }),
     debugSetPrepCountdown: (s) => { prepCountdown = s; },
     debugSetWaveClearTimer: (s) => { waveClearTimer = s; },
     debugViewField: () => el.viewFieldBtn.click(),
