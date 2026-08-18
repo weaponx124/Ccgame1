@@ -294,6 +294,14 @@ class AudioManager {
     this._burst({ duration: 0.15, gain: 0.2, filterType: 'lowpass', filterFreq: 400, reverb: 0.2 });
   }
 
+  // A quick woody knock — an enemy landing a hit on a fence it's blocked by, distinct from the
+  // duller thud of hitting the ward itself.
+  fenceHit() {
+    if (!this._allow('fenceHit', 180)) return;
+    this._tone({ freq: 180, freqEnd: 90, duration: 0.12, type: 'triangle', gain: 0.22, distort: 3, reverb: 0.15 });
+    this._burst({ duration: 0.08, gain: 0.16, filterType: 'lowpass', filterFreq: 900, reverb: 0.12 });
+  }
+
   mineExplosion() {
     this._duck(0.55, 40, 500);
     this._burst({ duration: 0.42, gain: 0.5, filterType: 'lowpass', filterFreq: 3000, filterFreqEnd: 150, distort: 10, reverb: 0.4 });

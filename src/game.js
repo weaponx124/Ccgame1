@@ -325,7 +325,7 @@
       // charging immediately. `cost` still gates the button (need at least one segment's worth).
       appendDefenseRow({
         name: `${tier.name} — Lv ${tierIndex + 1}/${tiers.length}`,
-        desc: `${describe(tier)} Drag along the battlefield to lay a run of them. ${placed}/${maxTotal} placed.`,
+        desc: `${describe(tier)} Drag along the battlefield to lay a run of them — start near an existing fence to connect the two. ${placed}/${maxTotal} placed.`,
         maxed: placedMaxed,
         cost: tier.cost,
         costLabel: `${tier.cost}g each`,
@@ -495,6 +495,24 @@
       else if (valid) break; // hit the gold/budget cap — no point drawing further ghosts past it
     }
     return { segments, rotation, placedCount, totalCost: placedCount * tier.cost };
+  }
+
+  /** If a touch starting a new fence drag lands near an existing alive fence (within
+   *  FENCE_CONNECT_DIST), snap it to sit exactly FENCE_WIDTH away — flush against that fence, in
+   *  whichever direction the touch came from — so extending a previous run connects cleanly
+   *  instead of needing a pixel-perfect drag start on a touchscreen. Falls back to continuing
+   *  along the existing fence's own line if the touch landed almost exactly on top of it. */
+  function snapToNearbyFence(point) {
+    let nearest = null;
+    let nearestDist = FENCE_CONNECT_DIST;
+    for (const fence of fences) {
+      if (!fence.alive) continue;
+      const d = dist(point.x, point.y, fence.x, fence.y);
+      if (d < nearestDist) { nearest = fence; nearestDist = d; }
+    }
+    if (!nearest) return point;
+    const angle = nearestDist < 1 ? -nearest.rotation : Math.atan2(point.y - nearest.y, point.x - nearest.x);
+    return { x: nearest.x + Math.cos(angle) * FENCE_WIDTH, y: nearest.y + Math.sin(angle) * FENCE_WIDTH };
   }
 
   function commitFenceDraw() {
@@ -702,8 +720,9 @@
       const p = input.toCanvasSpace(e.clientX, e.clientY);
       const ground = renderer3d.screenToGround(p.x, p.y);
       if (ground) {
-        fenceDraw.start = ground;
-        fenceDraw.end = ground;
+        const snapped = snapToNearbyFence(ground);
+        fenceDraw.start = snapped;
+        fenceDraw.end = snapped;
         canvas.setPointerCapture(e.pointerId);
       }
       return;
@@ -1110,18 +1129,25 @@
       const otherDist = target === base ? distToPlayer : distToBase;
       if (otherDist < preferredDist * 0.5) target = target === base ? player : base;
 
-      // Fences slow any enemy passing near them, and take ongoing damage from whoever is
-      // in contact — enough sustained pressure breaks a segment, but a couple of stragglers
-      // brushing past won't.
+      // Fences slow any enemy passing near them, and physically block whichever one it's
+      // actually touching — a blocked enemy stops right there (its movement target below
+      // becomes the fence, not its real destination) instead of drifting straight through, and
+      // attacks it on the same sustained cooldown as attacking the ward/player (below) until it
+      // breaks through and can continue toward whatever it was actually after.
       let speedMult = 1;
+      let blockingFence = null;
+      let blockingDist = Infinity;
       for (const fence of fences) {
         if (!fence.alive) continue;
         const fenceDist = dist(enemy.x, enemy.y, fence.x, fence.y);
         if (fenceDist <= fence.slowRadius) speedMult = Math.min(speedMult, fence.slowMult);
-        if (fenceDist <= fence.radius + enemy.radius) fence.takeDamage(enemy.damage * dt);
+        if (fenceDist <= fence.radius + enemy.radius && fenceDist < blockingDist) {
+          blockingFence = fence;
+          blockingDist = fenceDist;
+        }
       }
 
-      enemy.update(dt, target, speedMult);
+      enemy.update(dt, blockingFence || target, speedMult);
 
       if (enemy.isBoss) {
         // Each boss has one special ability on its own cooldown instead of (or, for the alpha,
@@ -1187,9 +1213,17 @@
         if (enemy.bossType !== 'alpha') continue;
       }
 
-      // Contact is sustained, not a one-shot suicide hit: an enemy that reaches the ward or the
-      // hunter keeps landing damage on a cooldown until something (the player) actually kills it.
-      if (dist(enemy.x, enemy.y, base.x, base.y) <= base.radius + enemy.radius) {
+      // Contact is sustained, not a one-shot suicide hit: an enemy that reaches a fence, the
+      // ward, or the hunter keeps landing damage on a cooldown until something (the player, or
+      // just breaking through) actually stops it. A blocked enemy always fights the fence in
+      // front of it rather than whatever's behind it — it physically can't reach past yet.
+      if (blockingFence) {
+        if (enemy._attackCooldown <= 0) {
+          blockingFence.takeDamage(enemy.damage);
+          audio.fenceHit();
+          enemy._attackCooldown = ENEMY_ATTACK_INTERVAL;
+        }
+      } else if (dist(enemy.x, enemy.y, base.x, base.y) <= base.radius + enemy.radius) {
         if (enemy._attackCooldown <= 0) {
           base.takeDamage(enemy.damage);
           audio.baseHit();
@@ -1661,6 +1695,7 @@
     },
     debugSpawn: (typeKey, x, y) => { enemies.push(new Enemy(x, y, typeKey, 1)); },
     debugSetAbilityCooldown: (enemyIdx, s) => { enemies[enemyIdx]._abilityCooldown = s; },
+    debugSetEnemyTargetPreference: (idx, pref) => { enemies[idx].targetPreference = pref; },
     debugSetWaveNumber: (n) => { waveManager.waveNumber = n; },
     debugBossForWave: (n) => waveManager.bossForWave(n),
     debugUpcomingBossType: () => waveManager.upcomingBossType(),
@@ -1702,6 +1737,7 @@
     debugFenceDragCommit: () => commitFenceDraw(),
     debugComputeFenceLine: (tierIndex, start, end) => computeFenceLine(tierIndex, start, end),
     debugFenceDrawState: () => (fenceDraw ? { ...fenceDraw } : null),
+    debugSnapToNearbyFence: (x, y) => snapToNearbyFence({ x, y }),
     debugSetPrepCountdown: (s) => { prepCountdown = s; },
     debugSetWaveClearTimer: (s) => { waveClearTimer = s; },
     debugViewField: () => el.viewFieldBtn.click(),

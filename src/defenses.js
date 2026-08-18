@@ -12,10 +12,12 @@
 const FENCE_MAX = 8; // total ever placed, across all tiers
 const MINE_MAX = 6;
 
-// Fences are a 2-unit-wide panel rather than a single post, and neighboring fences within
-// FENCE_CONNECT_DIST get a connecting rail so a row of them reads as one continuous wall.
-// FENCE_MIN_SPACING is deliberately looser than the connect distance so placements can sit close
-// enough to link up without fully overlapping.
+// Fences are a 2-unit-wide panel rather than a single post. FENCE_MIN_SPACING is deliberately
+// looser than FENCE_WIDTH so placements can sit edge-to-edge without being flagged as
+// overlapping. FENCE_CONNECT_DIST is how close a new drag's starting touch has to land to an
+// existing fence for game.js's snapToNearbyFence to snap it flush against that fence instead of
+// wherever was actually tapped — extending an existing run without a gap or an overlap doesn't
+// need pixel-perfect placement on a touchscreen.
 const FENCE_WIDTH = 46;
 const FENCE_MIN_SPACING = 34;
 const FENCE_CONNECT_DIST = 60;
