@@ -259,8 +259,9 @@ class AudioManager {
   }
 
   shootRevolver() {
-    this._tone({ freq: 700, freqEnd: 220, duration: 0.09, type: 'sawtooth', gain: 0.26, distort: 5, jitter: 0.05, reverb: 0.14 });
-    this._burst({ duration: 0.06, gain: 0.22, filterType: 'highpass', filterFreq: 1800, distort: 3, reverb: 0.12 });
+    this._tone({ freq: 700, freqEnd: 220, duration: 0.1, type: 'sawtooth', gain: 0.28, distort: 6, jitter: 0.05, reverb: 0.16 });
+    this._tone({ freq: 120, freqEnd: 55, duration: 0.14, type: 'sine', gain: 0.22, distort: 3, reverb: 0.14 });
+    this._burst({ duration: 0.07, gain: 0.24, filterType: 'highpass', filterFreq: 1800, distort: 4, reverb: 0.14 });
   }
 
   shootCoachGun() {
