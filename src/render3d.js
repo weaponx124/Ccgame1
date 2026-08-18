@@ -1450,6 +1450,47 @@ class Renderer3D {
       slug.scale.set(slugR, slugR * 1.5, slugR);
       slug.rotation.z = Math.PI / 2;
       group.add(slug);
+    } else if (weaponType === 'revolver') {
+      // A small, fast silvered slug — visually the "little sibling" of the blunderbuss's shard.
+      lightColor = isCrit ? 0xffe08c : 0xd4c090;
+      const mat = new THREE.MeshStandardMaterial({ color: 0xc8b878, emissive: lightColor, emissiveIntensity: 1.3, metalness: 0.7, roughness: 0.25 });
+      const slugR = isCrit ? 1.9 : 1.5;
+      const slug = new THREE.Mesh(Renderer3D._geo().capsule, mat);
+      slug.scale.set(slugR, slugR * 1.8, slugR);
+      slug.rotation.z = Math.PI / 2;
+      group.add(slug);
+    } else if (weaponType === 'coachgun') {
+      // Round buckshot balls rather than the blunderbuss's elongated shard — each pellet fires as
+      // its own Bullet (see Player.tryFire's pellet loop), so this is one ball among a spread.
+      lightColor = isCrit ? 0xffa050 : 0xc8b090;
+      const mat = new THREE.MeshStandardMaterial({ color: 0x8a7860, emissive: lightColor, emissiveIntensity: 0.85, roughness: 0.5, metalness: 0.4 });
+      const pelletR = isCrit ? 2.5 : 2;
+      const pellet = new THREE.Mesh(Renderer3D._geo().sphere, mat);
+      pellet.scale.setScalar(pelletR);
+      group.add(pellet);
+    } else if (weaponType === 'gatling') {
+      // A thin bright tracer, built to read clearly even when a dozen are in flight at once.
+      lightColor = isCrit ? 0xfff0a0 : 0xffd070;
+      const mat = new THREE.MeshStandardMaterial({ color: 0xb8935a, emissive: lightColor, emissiveIntensity: 1.7, metalness: 0.75, roughness: 0.2 });
+      const len = isCrit ? 11 : 8.5;
+      const tracer = new THREE.Mesh(Renderer3D._geo().cylinder, mat);
+      tracer.scale.set(0.85, len, 0.85);
+      tracer.rotation.z = Math.PI / 2;
+      group.add(tracer);
+    } else if (weaponType === 'thurible') {
+      // A burning censer-orb with a thin swinging chain loop, so it reads as a lobbed vessel
+      // rather than just a bigger bullet — the blast on impact is the payoff (see game.js).
+      lightColor = isCrit ? 0xff6a20 : 0xff9040;
+      const orbMat = new THREE.MeshStandardMaterial({ color: 0x3a2216, emissive: lightColor, emissiveIntensity: 2.2, roughness: 0.6, metalness: 0.3 });
+      const orbR = isCrit ? 6.2 : 5.2;
+      const orb = new THREE.Mesh(Renderer3D._geo().sphere, orbMat);
+      orb.scale.setScalar(orbR);
+      group.add(orb);
+      const chainMat = new THREE.MeshStandardMaterial({ color: 0x2a2018, roughness: 0.6, metalness: 0.6 });
+      const chain = new THREE.Mesh(new THREE.TorusGeometry(orbR * 0.7, 0.6, 5, 10), chainMat);
+      chain.rotation.x = Math.PI / 2;
+      chain.position.y = orbR * 0.9;
+      group.add(chain);
     } else {
       // Crossbow bolt: fletched shaft with a glowing arrowhead, angled to actually look like an arrow.
       lightColor = isCrit ? 0xff8c3c : 0xe0c068;

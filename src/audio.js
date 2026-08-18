@@ -258,9 +258,40 @@ class AudioManager {
     this._tone({ freq: 1410, freqEnd: 905, duration: 0.22, type: 'sine', gain: 0.12, detune: -12, reverb: 0.2 });
   }
 
+  shootRevolver() {
+    this._tone({ freq: 700, freqEnd: 220, duration: 0.09, type: 'sawtooth', gain: 0.26, distort: 5, jitter: 0.05, reverb: 0.14 });
+    this._burst({ duration: 0.06, gain: 0.22, filterType: 'highpass', filterFreq: 1800, distort: 3, reverb: 0.12 });
+  }
+
+  shootCoachGun() {
+    this._duck(0.25, 30, 200);
+    this._burst({ duration: 0.24, gain: 0.5, filterType: 'lowpass', filterFreq: 2600, filterFreqEnd: 250, distort: 9, reverb: 0.24 });
+    this._tone({ freq: 80, freqEnd: 38, duration: 0.2, type: 'sawtooth', gain: 0.34, distort: 7, reverb: 0.22 });
+    this._tone({ freq: 82, freqEnd: 40, duration: 0.2, type: 'sawtooth', gain: 0.2, detune: 10, distort: 7, reverb: 0.22 });
+  }
+
+  // Deliberately not rate-limited: at ~13 shots/sec, overlapping unthrottled shots blend into a
+  // continuous "brrrt" texture, which is the actual point of a hand-cranked gatling gun.
+  shootGatling() {
+    this._tone({ freq: 460, freqEnd: 200, duration: 0.06, type: 'square', gain: 0.16, distort: 4, jitter: 0.08, reverb: 0.08 });
+    this._burst({ duration: 0.04, gain: 0.14, filterType: 'highpass', filterFreq: 2200, reverb: 0.06 });
+  }
+
+  // The launch whoosh + a faint chain chime — the blast itself plays separately (mineExplosion,
+  // reused) once the shell actually lands, in game.js's bullet-collision handling.
+  shootThurible() {
+    this._tone({ freq: 140, freqEnd: 70, duration: 0.35, type: 'sine', gain: 0.24, distort: 2, reverb: 0.3 });
+    this._burst({ duration: 0.2, gain: 0.16, filterType: 'lowpass', filterFreq: 1200, reverb: 0.28 });
+    this._tone({ freq: 1600, duration: 0.12, type: 'triangle', gain: 0.08, delay: 0.04, reverb: 0.25 });
+  }
+
   shootWeapon(weaponType) {
     if (weaponType === 'blunderbuss') this.shootBlunderbuss();
     else if (weaponType === 'chakram') this.shootChakram();
+    else if (weaponType === 'revolver') this.shootRevolver();
+    else if (weaponType === 'coachgun') this.shootCoachGun();
+    else if (weaponType === 'gatling') this.shootGatling();
+    else if (weaponType === 'thurible') this.shootThurible();
     else this.shootCrossbow();
   }
 

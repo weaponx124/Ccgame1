@@ -1281,6 +1281,29 @@
         if (!enemy.alive || bullet.hitEnemies.has(enemy)) continue;
         const hitCenter = enemy.getHitCenter();
         if (dist(bullet.x, bullet.y, hitCenter.x, hitCenter.y) <= bullet.radius + enemy.hitRadius) {
+          if (bullet.weaponType === 'thurible') {
+            // Explosive impact: detonates on first contact, damaging every enemy in the blast
+            // radius at once (same pattern as a Mine) instead of just the one it touched.
+            explosions.push(new Explosion(bullet.x, bullet.y, THURIBLE_BLAST_RADIUS));
+            audio.mineExplosion();
+            for (const victim of enemies) {
+              if (!victim.alive) continue;
+              const vHitCenter = victim.getHitCenter();
+              if (dist(bullet.x, bullet.y, vHitCenter.x, vHitCenter.y) <= THURIBLE_BLAST_RADIUS + victim.hitRadius) {
+                victim.takeDamage(bullet.damage);
+                if (!victim.alive) {
+                  audio.enemyDeath();
+                  gold += victim.reward;
+                  audio.goldPickup();
+                  bloodPools.push(new BloodPool(victim.x, victim.y, victim.radius / 12));
+                } else {
+                  audio.hitEnemy(bullet.isCrit);
+                }
+              }
+            }
+            bullet.alive = false;
+            break;
+          }
           enemy.takeDamage(bullet.damage);
           bullet.hitEnemies.add(enemy);
           const hitAngle = Math.atan2(bullet.vy, bullet.vx);
@@ -1695,6 +1718,14 @@
     },
     debugSpawn: (typeKey, x, y) => { enemies.push(new Enemy(x, y, typeKey, 1)); },
     debugFireBulletAt: (x, y, damage) => { bullets.push(new Bullet(x, y, 0, 0, damage, false, 0, 'crossbow')); },
+    debugForceFire: (aimAngle) => {
+      if (typeof aimAngle === 'number') player.aimAngle = aimAngle;
+      player._fireCooldown = 0;
+      const fired = player.tryFire();
+      bullets.push(...fired);
+      return fired.map((b) => ({ x: b.x, y: b.y, vx: b.vx, vy: b.vy, damage: b.damage, weaponType: b.weaponType }));
+    },
+    debugExplosionCount: () => explosions.length,
     debugSetAbilityCooldown: (enemyIdx, s) => { enemies[enemyIdx]._abilityCooldown = s; },
     debugSetEnemyTargetPreference: (idx, pref) => { enemies[idx].targetPreference = pref; },
     debugSetWaveNumber: (n) => { waveManager.waveNumber = n; },

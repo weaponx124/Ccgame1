@@ -41,6 +41,64 @@ const WEAPON_TYPES = {
     spreadAngle: 0,
     pierce: 2,
   },
+  revolver: {
+    name: 'Silvered Revolver',
+    shortName: 'Revolver',
+    desc: "Quick, reliable six-shooter — a hunter's sidearm.",
+    unlockCost: 40,
+    startUnlockCost: 10,
+    damageMult: 0.85,
+    fireRateMult: 1.6,
+    bulletSpeedMult: 1.1,
+    pellets: 1,
+    spreadAngle: 0,
+    pierce: 0,
+  },
+  coachgun: {
+    name: 'Twin-Barrel Coach Gun',
+    shortName: 'Coach Gun',
+    desc: 'Both barrels at once. Devastating up close, slow to reload.',
+    unlockCost: 100,
+    startUnlockCost: 30,
+    damageMult: 0.9,
+    fireRateMult: 0.35,
+    bulletSpeedMult: 0.8,
+    pellets: 5,
+    spreadAngle: 0.65,
+    pierce: 0,
+  },
+  gatling: {
+    name: 'Hand-Cranked Gatling',
+    shortName: 'Gatling',
+    desc: 'Relentless sustained fire — hoses down a crowd.',
+    unlockCost: 160,
+    startUnlockCost: 40,
+    damageMult: 0.35,
+    fireRateMult: 3.2,
+    bulletSpeedMult: 1,
+    pellets: 1,
+    spreadAngle: 0.12, // slight inaccuracy from the hand-crank shake
+    pierce: 0,
+  },
+  thurible: {
+    name: 'Blessed Thurible Launcher',
+    shortName: 'Thurible',
+    desc: 'Lobs blessed fire that bursts into a blast on impact.',
+    unlockCost: 220,
+    startUnlockCost: 55,
+    damageMult: 2.2,
+    fireRateMult: 0.3,
+    bulletSpeedMult: 0.6,
+    pellets: 1,
+    spreadAngle: 0,
+    pierce: 0,
+    explosive: true, // see THURIBLE_BLAST_RADIUS below and its handling in game.js's bullet-collision loop
+  },
 };
 
-const WEAPON_ORDER = ['crossbow', 'blunderbuss', 'chakram'];
+// How far a Thurible shell's blast reaches on impact — every alive enemy in this radius takes the
+// shell's full damage at once (same flat, no-falloff pattern as a Mine's blastRadius), instead of
+// only whichever enemy it directly touched.
+const THURIBLE_BLAST_RADIUS = 55;
+
+const WEAPON_ORDER = ['crossbow', 'revolver', 'blunderbuss', 'chakram', 'coachgun', 'gatling', 'thurible'];
