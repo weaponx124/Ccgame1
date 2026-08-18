@@ -47,8 +47,12 @@ const WEAPON_TYPES = {
     desc: "Quick, reliable six-shooter — a hunter's sidearm.",
     unlockCost: 40,
     startUnlockCost: 10,
-    damageMult: 0.85,
-    fireRateMult: 1.6,
+    damageMult: 1,
+    // A modest bump over the crossbow's own rate (not the 1.6x this shipped with, which at
+    // 6.4 shots/sec was already more than half the Gatling's actual sustained rate of 12.8/sec —
+    // it read as a second machine gun instead of a snappy, punchy pistol). 1.2x keeps each shot
+    // audibly distinct while still feeling like a real upgrade.
+    fireRateMult: 1.2,
     bulletSpeedMult: 1.1,
     pellets: 1,
     spreadAngle: 0,
