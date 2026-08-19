@@ -241,7 +241,7 @@ class Renderer3D {
   _buildGround() {
     const tex = this._bakeGroundTexture();
     const geo = new THREE.PlaneGeometry(2000, 2000);
-    const mat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.96, metalness: 0.02 });
+    const mat = Renderer3D._toonMat({ map: tex, roughness: 0.96, metalness: 0.02 });
     const ground = new THREE.Mesh(geo, mat);
     ground.rotation.x = -Math.PI / 2;
     ground.receiveShadow = true;
@@ -274,7 +274,7 @@ class Renderer3D {
 
   _makeTombstone(x, y, scale, rot) {
     const group = new THREE.Group();
-    const mat = new THREE.MeshStandardMaterial({ color: 0x322c3a, roughness: 0.95 });
+    const mat = Renderer3D._toonMat({ color: 0x322c3a, roughness: 0.95 });
     const body = new THREE.Mesh(new THREE.CylinderGeometry(15, 17, 44, 10, 1, false, 0, Math.PI), mat);
     body.rotation.z = Math.PI;
     body.rotation.y = Math.PI / 2;
@@ -294,7 +294,7 @@ class Renderer3D {
 
   _makeDeadTree(x, y, scale, rot) {
     const group = new THREE.Group();
-    const mat = new THREE.MeshStandardMaterial({ color: 0x1e1712, roughness: 1 });
+    const mat = Renderer3D._toonMat({ color: 0x1e1712, roughness: 1 });
     const trunk = new THREE.Mesh(new THREE.CylinderGeometry(3, 5, 70, 6), mat);
     trunk.position.y = 35;
     trunk.castShadow = true;
@@ -318,7 +318,7 @@ class Renderer3D {
 
   _makeCrypt(x, y) {
     const group = new THREE.Group();
-    const stoneMat = new THREE.MeshStandardMaterial({ color: 0x2c2634, roughness: 0.92 });
+    const stoneMat = Renderer3D._toonMat({ color: 0x2c2634, roughness: 0.92 });
     const body = new THREE.Mesh(new THREE.BoxGeometry(80, 50, 60), stoneMat);
     body.position.y = 25;
     body.castShadow = true;
@@ -329,7 +329,7 @@ class Renderer3D {
     roof.position.y = 65;
     roof.castShadow = true;
     group.add(roof);
-    const doorMat = new THREE.MeshStandardMaterial({ color: 0x050308, roughness: 1 });
+    const doorMat = Renderer3D._toonMat({ color: 0x050308, roughness: 1 });
     const door = new THREE.Mesh(new THREE.CylinderGeometry(11, 11, 26, 12, 1, false, 0, Math.PI), doorMat);
     door.rotation.z = Math.PI;
     door.rotation.y = Math.PI / 2;
@@ -344,7 +344,7 @@ class Renderer3D {
 
   _makeBonePile(x, y) {
     const group = new THREE.Group();
-    const boneMat = new THREE.MeshStandardMaterial({ color: 0xe4d8c0, roughness: 0.7 });
+    const boneMat = Renderer3D._toonMat({ color: 0xe4d8c0, roughness: 0.7 });
     for (const [bx, by, bz, rot] of [[-8, 1, 2, 0.3], [4, 1.5, -3, -0.6], [-2, 1, 6, 1.1]]) {
       const bone = new THREE.Mesh(new THREE.CapsuleGeometry(1.4, 12, 4, 6), boneMat);
       bone.position.set(bx, by, bz);
@@ -357,7 +357,7 @@ class Renderer3D {
     skull.position.set(-6, 4, -2);
     skull.castShadow = true;
     group.add(skull);
-    const eyeMat = new THREE.MeshStandardMaterial({ color: 0x050308 });
+    const eyeMat = Renderer3D._toonMat({ color: 0x050308 });
     for (const ex of [-2, 2]) {
       const eye = new THREE.Mesh(new THREE.SphereGeometry(1, 6, 6), eyeMat);
       eye.position.set(-6 + ex, 4, 1.6);
@@ -369,7 +369,7 @@ class Renderer3D {
 
   _makeBrazier(x, y) {
     const group = new THREE.Group();
-    const metalMat = new THREE.MeshStandardMaterial({ color: 0x2a2430, roughness: 0.6, metalness: 0.4 });
+    const metalMat = Renderer3D._toonMat({ color: 0x2a2430, roughness: 0.6, metalness: 0.4 });
     for (const lx of [-5, 5]) {
       const leg = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.6, 20, 6), metalMat);
       leg.position.set(lx, 10, 0);
@@ -676,6 +676,63 @@ class Renderer3D {
     return mesh;
   }
 
+  /** The "inverted hull" outline trick: a solid-black, backside-only, slightly-oversized duplicate
+   *  of a mesh, normally depth-tested — at the silhouette edge the backside faces poke out past
+   *  the front-facing surface and read as a crisp black line; everywhere else the real surface's
+   *  own depth occludes it, so no interior lines appear. This is the core of the graphic-novel
+   *  look (see _toonMat below for the flat-banded shading half of it) and stays on even in low
+   *  quality mode — losing it would change the game's whole visual identity, not just trim an
+   *  atmosphere effect the way the rim shell above does. */
+  _makeOutlineShell(geo, scale = 1.14) {
+    // A night scene's own shadows already sit near-zero luminance, so a black ink line has
+    // nothing left to contrast against and disappears regardless of thickness (confirmed by
+    // testing up to heavy oversize). This is the same problem night-panel comic art solves by
+    // inverting the convention: a pale contour line against dark ink washes, not a dark line
+    // against light ones. A cool moonlit-silver line reads as "moonlight catching every edge" —
+    // genuine contrast, and thematically apt for the setting rather than an arbitrary fix.
+    const mat = new THREE.MeshBasicMaterial({ color: 0xd8e0f4, side: THREE.BackSide });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.scale.setScalar(scale);
+    return mesh;
+  }
+
+  /** A small, hard-stepped (nearest-filtered, no smoothing) grayscale gradient used as every toon
+   *  material's gradientMap — this is what turns a normal smooth lighting falloff into flat,
+   *  poster-like bands of shadow/mid-tone/highlight instead of a continuous PBR gradient. Cached
+   *  once and shared by every material _toonMat creates. */
+  static _toonGradientMap() {
+    if (Renderer3D._toonGradientTex) return Renderer3D._toonGradientTex;
+    const canvas = document.createElement('canvas');
+    canvas.width = 4;
+    canvas.height = 1;
+    const ctx = canvas.getContext('2d');
+    const bands = ['#131318', '#4a4a54', '#8e8e98', '#e8e8ec'];
+    for (let i = 0; i < bands.length; i++) {
+      ctx.fillStyle = bands[i];
+      ctx.fillRect(i, 0, 1, 1);
+    }
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.minFilter = THREE.NearestFilter;
+    tex.magFilter = THREE.NearestFilter;
+    tex.generateMipmaps = false;
+    Renderer3D._toonGradientTex = tex;
+    return tex;
+  }
+
+  /** Drop-in replacement for `new THREE.MeshStandardMaterial(opts)` — same opts object (color,
+   *  map, bumpMap, bumpScale, emissive, emissiveIntensity, side, transparent, opacity all carry
+   *  over unchanged), but built as a MeshToonMaterial with the shared stepped gradient map instead
+   *  of PBR shading. roughness/metalness are silently dropped (toon materials don't use them;
+   *  passing them through would just spam "property not recognized" warnings). This is what makes
+   *  every character/prop in the game shade in flat graphic-novel bands instead of a smooth
+   *  realistic falloff — paired with _makeOutlineShell's black silhouette line, that's the whole
+   *  style pivot away from "generic semi-realistic primitives" and into something that reads as
+   *  deliberately drawn. */
+  static _toonMat(opts) {
+    const { roughness, metalness, ...rest } = opts;
+    return new THREE.MeshToonMaterial({ ...rest, gradientMap: Renderer3D._toonGradientMap() });
+  }
+
   /** A capsule "bone" hanging down -length from its pivot (local origin), radius r, color. Unit
    *  capsule geometry is radius 1, cylindrical length 1 (total height 3), so scale accordingly.
    *  Limbs don't cast shadows — with up to 8 segments per character that's the single biggest
@@ -683,7 +740,7 @@ class Renderer3D {
    *  here". */
   _makeLimb(length, radius, color) {
     const geo = Renderer3D._geo().capsule;
-    const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.85 });
+    const mat = Renderer3D._toonMat({ color, roughness: 0.85 });
     const mesh = new THREE.Mesh(geo, mat);
     mesh.scale.set(radius, Math.max(0.1, length - 2 * radius), radius);
     mesh.position.y = -length / 2;
@@ -706,7 +763,7 @@ class Renderer3D {
   }
 
   _addFoot(joint, lowerLen, radius, color) {
-    const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.9 });
+    const mat = Renderer3D._toonMat({ color, roughness: 0.9 });
     const foot = new THREE.Mesh(Renderer3D._geo().box, mat);
     foot.scale.set(radius * 2.1, radius * 1.3, radius * 2.9);
     foot.position.set(0, -lowerLen - radius * 0.35, radius * 0.9);
@@ -715,7 +772,7 @@ class Renderer3D {
   }
 
   _addHand(joint, lowerLen, radius, color) {
-    const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.8 });
+    const mat = Renderer3D._toonMat({ color, roughness: 0.8 });
     const hand = new THREE.Mesh(Renderer3D._geo().sphere, mat);
     hand.scale.setScalar(radius * 1.4);
     hand.position.y = -lowerLen;
@@ -757,14 +814,14 @@ class Renderer3D {
     group.add(shoulderL, shoulderR);
 
     // Shoulder caps hide the harsh seam where an arm pivot meets the torso.
-    const capMat = new THREE.MeshStandardMaterial({ color: torsoColor, roughness: 0.8 });
+    const capMat = Renderer3D._toonMat({ color: torsoColor, roughness: 0.8 });
     for (const s of [shoulderL, shoulderR]) {
       const cap = new THREE.Mesh(Renderer3D._geo().sphere, capMat);
       cap.scale.setScalar(legRadius * 0.85);
       s.add(cap);
     }
 
-    const torsoMat = new THREE.MeshStandardMaterial({ color: torsoColor, roughness: 0.8, map: skinTex, bumpMap: skinTex, bumpScale: 2.2 });
+    const torsoMat = Renderer3D._toonMat({ color: torsoColor, roughness: 0.8, map: skinTex, bumpMap: skinTex, bumpScale: 2.2 });
     const torsoGeo = Renderer3D._jitteredGeo('torso-' + texturePattern, Renderer3D._geo().capsule, 0.05);
     const torso = new THREE.Mesh(torsoGeo, torsoMat);
     torso.scale.set(torsoRadius, Math.max(0.1, torsoLen - torsoRadius * 1.6), torsoRadius);
@@ -772,10 +829,11 @@ class Renderer3D {
     torso.castShadow = true;
     torso.receiveShadow = true;
     group.add(torso);
+    torso.add(this._makeOutlineShell(torsoGeo));
     torso.add(this._makeRimShell(torsoGeo));
 
     // A waist band breaks up the torso capsule's uniform taper instead of reading as one smooth tube.
-    const beltMat = new THREE.MeshStandardMaterial({ color: 0x1a1512, roughness: 0.7 });
+    const beltMat = Renderer3D._toonMat({ color: 0x1a1512, roughness: 0.7 });
     const belt = new THREE.Mesh(Renderer3D._geo().cylinder, beltMat);
     belt.scale.set(torsoRadius * 1.08, torsoRadius * 0.22, torsoRadius * 1.08);
     belt.position.y = legLen + torsoRadius * 0.55;
@@ -783,12 +841,13 @@ class Renderer3D {
 
     const headGroup = new THREE.Group();
     headGroup.position.y = legLen + torsoLen + headRadius * 0.7;
-    const headMat = new THREE.MeshStandardMaterial({ color: skinColor, roughness: 0.75, map: skinTex, bumpMap: skinTex, bumpScale: 1.8 });
+    const headMat = Renderer3D._toonMat({ color: skinColor, roughness: 0.75, map: skinTex, bumpMap: skinTex, bumpScale: 1.8 });
     const headGeo = Renderer3D._jitteredGeo('head-' + texturePattern, Renderer3D._geo().sphere, 0.07);
     const head = new THREE.Mesh(headGeo, headMat);
     head.scale.setScalar(headRadius);
     head.castShadow = true;
     headGroup.add(head);
+    head.add(this._makeOutlineShell(headGeo, 1.12));
     head.add(this._makeRimShell(headGeo, 0.22));
 
     if (hasJaw) {
@@ -800,7 +859,7 @@ class Renderer3D {
       headGroup.add(jaw);
     }
 
-    const eyeMat = new THREE.MeshStandardMaterial({ color: eyeColor, emissive: eyeColor, emissiveIntensity: 2 });
+    const eyeMat = Renderer3D._toonMat({ color: eyeColor, emissive: eyeColor, emissiveIntensity: 2 });
     const eye = new THREE.Mesh(Renderer3D._geo().sphere, eyeMat);
     eye.scale.setScalar(headRadius * 0.14);
     eye.position.set(headRadius * 0.65, headRadius * 0.05, headRadius * 0.6);
@@ -831,7 +890,7 @@ class Renderer3D {
       skinColor: 0x6b5040, eyeColor: 0xf0d98c, limbColor: 0x3a2a20, torsoColor: 0x5a4030,
     });
 
-    const cloakMat = new THREE.MeshStandardMaterial({ color: 0x0d0a0d, roughness: 0.92, side: THREE.DoubleSide });
+    const cloakMat = Renderer3D._toonMat({ color: 0x0d0a0d, roughness: 0.92, side: THREE.DoubleSide });
     const cloak = new THREE.Mesh(new THREE.ConeGeometry(15, 42, 8, 1, true), cloakMat);
     cloak.position.set(0, rig.legLen + rig.torsoLen * 0.42, -5);
     cloak.rotation.x = Math.PI;
@@ -847,7 +906,7 @@ class Renderer3D {
     rig.headGroup.add(hood);
 
     // A diagonal bandolier strap across the chest — hunter's gear, not bare clothing.
-    const strapMat = new THREE.MeshStandardMaterial({ color: 0x2a1c14, roughness: 0.85 });
+    const strapMat = Renderer3D._toonMat({ color: 0x2a1c14, roughness: 0.85 });
     const strap = new THREE.Mesh(Renderer3D._geo().box, strapMat);
     strap.scale.set(2.2, rig.torsoLen * 1.05, 2.4);
     strap.position.set(rig.torsoRadius * 0.3, rig.legLen + rig.torsoLen / 2, rig.torsoRadius * 0.4);
@@ -879,10 +938,10 @@ class Renderer3D {
    *  world position bullets actually spawn from, regardless of how long or short that weapon reads. */
   _buildWeaponVisual(weaponType, muzzleReach) {
     const group = new THREE.Group();
-    const metalMat = new THREE.MeshStandardMaterial({ color: 0x8a8a94, roughness: 0.4, metalness: 0.6 });
-    const darkMetalMat = new THREE.MeshStandardMaterial({ color: 0x5a5a62, roughness: 0.45, metalness: 0.65 });
-    const woodMat = new THREE.MeshStandardMaterial({ color: 0x2a1c14, roughness: 0.8 });
-    const tipMat = new THREE.MeshStandardMaterial({ color: 0xf0d98c, emissive: 0xf0d98c, emissiveIntensity: 1.6 });
+    const metalMat = Renderer3D._toonMat({ color: 0x8a8a94, roughness: 0.4, metalness: 0.6 });
+    const darkMetalMat = Renderer3D._toonMat({ color: 0x5a5a62, roughness: 0.45, metalness: 0.65 });
+    const woodMat = Renderer3D._toonMat({ color: 0x2a1c14, roughness: 0.8 });
+    const tipMat = Renderer3D._toonMat({ color: 0xf0d98c, emissive: 0xf0d98c, emissiveIntensity: 1.6 });
 
     const addTipGlow = (x, size = 1.8, glowSize = 10) => {
       const tip = new THREE.Mesh(Renderer3D._geo().sphere, tipMat);
@@ -967,12 +1026,12 @@ class Renderer3D {
       tube.position.x = len / 2;
       tube.castShadow = true;
       group.add(tube);
-      const censerMat = new THREE.MeshStandardMaterial({ color: 0x3a2216, emissive: 0xff9040, emissiveIntensity: 1.4, roughness: 0.6 });
+      const censerMat = Renderer3D._toonMat({ color: 0x3a2216, emissive: 0xff9040, emissiveIntensity: 1.4, roughness: 0.6 });
       const censer = new THREE.Mesh(Renderer3D._geo().sphere, censerMat);
       censer.scale.setScalar(2.4);
       censer.position.set(len * 0.3, -3.5, 2.5);
       group.add(censer);
-      const chainMat = new THREE.MeshStandardMaterial({ color: 0x2a2018, roughness: 0.6, metalness: 0.6 });
+      const chainMat = Renderer3D._toonMat({ color: 0x2a2018, roughness: 0.6, metalness: 0.6 });
       const chain = new THREE.Mesh(new THREE.TorusGeometry(1.4, 0.35, 5, 8), chainMat);
       chain.position.set(len * 0.3, -1.2, 2.5);
       chain.rotation.x = Math.PI / 2;
@@ -983,7 +1042,7 @@ class Renderer3D {
     } else if (weaponType === 'chakram') {
       // No barrel at all — a flat, glowing ring held forward at the ready, since it's thrown
       // rather than fired from a gun.
-      const ringMat = new THREE.MeshStandardMaterial({ color: 0xcfd6dc, emissive: 0x9fd0ff, emissiveIntensity: 1, metalness: 0.6, roughness: 0.3 });
+      const ringMat = Renderer3D._toonMat({ color: 0xcfd6dc, emissive: 0x9fd0ff, emissiveIntensity: 1, metalness: 0.6, roughness: 0.3 });
       const ring = new THREE.Mesh(new THREE.TorusGeometry(5, 1.1, 6, 14), ringMat);
       ring.position.x = muzzleReach * 0.55;
       ring.rotation.y = Math.PI / 2;
@@ -1049,21 +1108,21 @@ class Renderer3D {
       hasJaw: false, // builds its own darker, gaping-jaw shape below instead of the shared one
       texturePattern: 'mottle',
     });
-    const tatterMat = new THREE.MeshStandardMaterial({ color: 0x242c14, roughness: 1, side: THREE.DoubleSide });
+    const tatterMat = Renderer3D._toonMat({ color: 0x242c14, roughness: 1, side: THREE.DoubleSide });
     for (const a of [0, 1.2, 2.4, 3.6, 4.8]) {
       const tatter = new THREE.Mesh(new THREE.PlaneGeometry(4, 9), tatterMat);
       tatter.position.set(Math.cos(a) * 7, rig.legLen + 6, Math.sin(a) * 7);
       tatter.rotation.y = a;
       rig.group.add(tatter);
     }
-    const jawMat = new THREE.MeshStandardMaterial({ color: 0x0a0806, roughness: 1 });
+    const jawMat = Renderer3D._toonMat({ color: 0x0a0806, roughness: 1 });
     const jaw = new THREE.Mesh(Renderer3D._geo().sphere, jawMat);
     jaw.scale.set(rig.headRadius * 0.45, rig.headRadius * 0.3, rig.headRadius * 0.4);
     jaw.position.set(0, rig.legLen + rig.torsoLen - rig.headRadius * 0.2, rig.headRadius * 0.5);
     rig.group.add(jaw);
 
     // Exposed ribs on the chest — a rotting corpse, not just a green person.
-    const ribMat = new THREE.MeshStandardMaterial({ color: 0xd8d0b8, roughness: 0.8 });
+    const ribMat = Renderer3D._toonMat({ color: 0xd8d0b8, roughness: 0.8 });
     for (const rx of [-2.6, -0.6, 1.6]) {
       const rib = new THREE.Mesh(Renderer3D._geo().box, ribMat);
       rib.scale.set(1, 5.5, 1.1);
@@ -1072,14 +1131,14 @@ class Renderer3D {
     }
 
     // A dark rot patch decal on the torso.
-    const rotMat = new THREE.MeshStandardMaterial({ color: 0x232f16, roughness: 1 });
+    const rotMat = Renderer3D._toonMat({ color: 0x232f16, roughness: 1 });
     const rotPatch = new THREE.Mesh(Renderer3D._geo().sphere, rotMat);
     rotPatch.scale.set(3, 2, 0.5);
     rotPatch.position.set(3.4, rig.legLen + rig.torsoLen * 0.78, rig.torsoRadius * 0.92);
     rig.group.add(rotPatch);
 
     // Patchy scalp — a few ragged tufts instead of a bald sphere.
-    const hairMat = new THREE.MeshStandardMaterial({ color: 0x14170c, roughness: 1 });
+    const hairMat = Renderer3D._toonMat({ color: 0x14170c, roughness: 1 });
     for (const [hx, hz] of [[-2.6, -2.4], [2.1, -1.6], [0.3, -3.3]]) {
       const tuft = new THREE.Mesh(Renderer3D._geo().cone, hairMat);
       tuft.scale.set(0.7, 2.5, 0.7);
@@ -1096,13 +1155,13 @@ class Renderer3D {
       skinColor: 0xd4c8be, eyeColor: 0xff1030, limbColor: 0x2a1522, torsoColor: 0x3f1826,
       texturePattern: 'vein',
     });
-    const capeMat = new THREE.MeshStandardMaterial({ color: 0x2f050d, roughness: 0.85, side: THREE.DoubleSide });
+    const capeMat = Renderer3D._toonMat({ color: 0x2f050d, roughness: 0.85, side: THREE.DoubleSide });
     const cape = new THREE.Mesh(new THREE.ConeGeometry(13, 40, 6, 1, true), capeMat);
     cape.position.set(0, rig.legLen + rig.torsoLen * 0.32, -5);
     cape.rotation.x = Math.PI;
     cape.castShadow = true;
     rig.group.add(cape);
-    const fangMat = new THREE.MeshStandardMaterial({ color: 0xf8f2ea });
+    const fangMat = Renderer3D._toonMat({ color: 0xf8f2ea });
     for (const fx of [-1, 1]) {
       const fang = new THREE.Mesh(Renderer3D._geo().cone, fangMat);
       fang.scale.set(0.7, 1.6, 0.7);
@@ -1112,7 +1171,7 @@ class Renderer3D {
     }
 
     // Slicked-back hair and a widow's peak — the "aristocrat", not just a pale person with fangs.
-    const hairMat = new THREE.MeshStandardMaterial({ color: 0x0d0508, roughness: 0.4, metalness: 0.2 });
+    const hairMat = Renderer3D._toonMat({ color: 0x0d0508, roughness: 0.4, metalness: 0.2 });
     const hairCap = new THREE.Mesh(Renderer3D._geo().sphere, hairMat);
     hairCap.scale.set(rig.headRadius * 1.03, rig.headRadius * 0.6, rig.headRadius * 1.03);
     hairCap.position.set(0, rig.headRadius * 0.32, -rig.headRadius * 0.1);
@@ -1124,7 +1183,7 @@ class Renderer3D {
     rig.headGroup.add(peak);
 
     // A popped, angular collar flanking the neck — classic vampire silhouette.
-    const collarMat = new THREE.MeshStandardMaterial({ color: 0x1c0a12, roughness: 0.55 });
+    const collarMat = Renderer3D._toonMat({ color: 0x1c0a12, roughness: 0.55 });
     for (const cx of [-1, 1]) {
       const collar = new THREE.Mesh(Renderer3D._geo().box, collarMat);
       collar.scale.set(2, 11, 1.4);
@@ -1143,7 +1202,7 @@ class Renderer3D {
       skinColor: 0x6b4f38, eyeColor: 0xf0c020, limbColor: 0x453220, torsoColor: 0x5c4530,
       texturePattern: 'fur',
     });
-    const earMat = new THREE.MeshStandardMaterial({ color: 0x2a1e12, roughness: 1 });
+    const earMat = Renderer3D._toonMat({ color: 0x2a1e12, roughness: 1 });
     for (const ex of [-1, 1]) {
       const ear = new THREE.Mesh(Renderer3D._geo().cone, earMat);
       ear.scale.set(2.6, 6, 2.6);
@@ -1157,12 +1216,12 @@ class Renderer3D {
     snout.scale.set(rig.headRadius * 0.5, rig.headRadius * 0.42, rig.headRadius * 0.95);
     snout.position.set(0, -rig.headRadius * 0.12, rig.headRadius * 0.85);
     rig.headGroup.add(snout);
-    const noseMat = new THREE.MeshStandardMaterial({ color: 0x0a0806, roughness: 0.9 });
+    const noseMat = Renderer3D._toonMat({ color: 0x0a0806, roughness: 0.9 });
     const nose = new THREE.Mesh(Renderer3D._geo().sphere, noseMat);
     nose.scale.setScalar(rig.headRadius * 0.16);
     nose.position.set(0, -rig.headRadius * 0.1, rig.headRadius * 1.28);
     rig.headGroup.add(nose);
-    const fangMat = new THREE.MeshStandardMaterial({ color: 0xf4eee0 });
+    const fangMat = Renderer3D._toonMat({ color: 0xf4eee0 });
     for (const fx of [-1, 1]) {
       const fang = new THREE.Mesh(Renderer3D._geo().cone, fangMat);
       fang.scale.set(0.75, 1.8, 0.75);
@@ -1172,7 +1231,7 @@ class Renderer3D {
     }
 
     // A ragged fur ridge along the spine.
-    const furMat = new THREE.MeshStandardMaterial({ color: 0x3a2a1a, roughness: 1 });
+    const furMat = Renderer3D._toonMat({ color: 0x3a2a1a, roughness: 1 });
     for (const fy of [0.28, 0.52, 0.76]) {
       const spike = new THREE.Mesh(Renderer3D._geo().cone, furMat);
       spike.scale.set(1.7, 5, 1.7);
@@ -1182,7 +1241,7 @@ class Renderer3D {
     }
 
     // A tail.
-    const tailMat = new THREE.MeshStandardMaterial({ color: 0x453220, roughness: 0.9 });
+    const tailMat = Renderer3D._toonMat({ color: 0x453220, roughness: 0.9 });
     const tail = new THREE.Mesh(Renderer3D._geo().capsule, tailMat);
     tail.scale.set(2.6, 15, 2.6);
     tail.position.set(0, rig.legLen + rig.torsoRadius * 0.35, -rig.torsoRadius * 1.05);
@@ -1190,7 +1249,7 @@ class Renderer3D {
     rig.group.add(tail);
 
     // Claws on every limb, not just the legs — hands are the ones that actually threaten the player.
-    const clawMat = new THREE.MeshStandardMaterial({ color: 0xe8e0d0 });
+    const clawMat = Renderer3D._toonMat({ color: 0xe8e0d0 });
     for (const knee of [rig.kneeL, rig.kneeR]) {
       const claw = new THREE.Mesh(Renderer3D._geo().cone, clawMat);
       claw.scale.set(1.2, 3, 1.2);
@@ -1222,7 +1281,7 @@ class Renderer3D {
       texturePattern: 'armor',
     });
 
-    const armorMat = new THREE.MeshStandardMaterial({ color: 0x2c2822, roughness: 0.55, metalness: 0.6, map: Renderer3D._bakeSkinTexture('armor'), bumpMap: Renderer3D._bakeSkinTexture('armor'), bumpScale: 2.5 });
+    const armorMat = Renderer3D._toonMat({ color: 0x2c2822, roughness: 0.55, metalness: 0.6, map: Renderer3D._bakeSkinTexture('armor'), bumpMap: Renderer3D._bakeSkinTexture('armor'), bumpScale: 2.5 });
     const runeGlow = 0xb060ff;
 
     // A heavy breastplate over the torso.
@@ -1233,7 +1292,7 @@ class Renderer3D {
     rig.group.add(chest);
 
     // A cracked rune glowing through the breastplate — the "corrupted by the ward" tell.
-    const rune = new THREE.Mesh(Renderer3D._geo().box, new THREE.MeshStandardMaterial({ color: runeGlow, emissive: runeGlow, emissiveIntensity: 2.2 }));
+    const rune = new THREE.Mesh(Renderer3D._geo().box, Renderer3D._toonMat({ color: runeGlow, emissive: runeGlow, emissiveIntensity: 2.2 }));
     rune.scale.set(rig.torsoRadius * 0.35, rig.torsoRadius * 0.5, 1);
     rune.position.set(0, rig.legLen + rig.torsoLen * 0.68, rig.torsoRadius * 0.75);
     rig.group.add(rune);
@@ -1265,14 +1324,14 @@ class Renderer3D {
     // cape silhouette language, but shredded and colorless. A single wide plane rather than
     // several strips — this boss already carries more meshes than any regular enemy (armor,
     // weapon, helm), so it's worth being economical about further additions with a similar look.
-    const bannerMat = new THREE.MeshStandardMaterial({ color: 0x1c1a16, roughness: 0.95, side: THREE.DoubleSide });
+    const bannerMat = Renderer3D._toonMat({ color: 0x1c1a16, roughness: 0.95, side: THREE.DoubleSide });
     const banner = new THREE.Mesh(new THREE.PlaneGeometry(16, 26), bannerMat);
     banner.position.set(0, rig.legLen - 4, -rig.torsoRadius * 0.5);
     banner.rotation.x = 0.15;
     rig.group.add(banner);
 
     // A gaunt, half-skeletal helm instead of the shared jaw — hollow save for the glowing eyes.
-    const helmMat = new THREE.MeshStandardMaterial({ color: 0x24211c, roughness: 0.6, metalness: 0.5 });
+    const helmMat = Renderer3D._toonMat({ color: 0x24211c, roughness: 0.6, metalness: 0.5 });
     const helm = new THREE.Mesh(Renderer3D._geo().sphere, helmMat);
     helm.scale.set(rig.headRadius * 1.08, rig.headRadius * 0.65, rig.headRadius * 1.08);
     helm.position.y = rig.headRadius * 0.35;
@@ -1290,7 +1349,7 @@ class Renderer3D {
 
     // A massive two-handed cleaver held in front — the boss's whole silhouette should read as
     // "this hits hard", not just "this has a lot of HP".
-    const weaponMat = new THREE.MeshStandardMaterial({ color: 0x4a4038, roughness: 0.5, metalness: 0.7 });
+    const weaponMat = Renderer3D._toonMat({ color: 0x4a4038, roughness: 0.5, metalness: 0.7 });
     const weaponPivot = new THREE.Group();
     weaponPivot.position.set(rig.torsoRadius * 0.9, rig.legLen + rig.torsoLen * 0.55, rig.torsoRadius * 0.6);
     const haft = new THREE.Mesh(Renderer3D._geo().cylinder, weaponMat);
@@ -1325,7 +1384,7 @@ class Renderer3D {
 
     // A long, tattered ethereal cloak — bigger and more ragged than the regular vampire's cape,
     // and semi-transparent to read as ghostly rather than solid cloth.
-    const cloakMat = new THREE.MeshStandardMaterial({ color: 0x0c1416, roughness: 0.8, side: THREE.DoubleSide, transparent: true, opacity: 0.85 });
+    const cloakMat = Renderer3D._toonMat({ color: 0x0c1416, roughness: 0.8, side: THREE.DoubleSide, transparent: true, opacity: 0.85 });
     const cloak = new THREE.Mesh(new THREE.ConeGeometry(16, 50, 7, 1, true), cloakMat);
     cloak.position.set(0, rig.legLen + rig.torsoLen * 0.28, -6);
     cloak.rotation.x = Math.PI;
@@ -1333,7 +1392,7 @@ class Renderer3D {
     rig.group.add(cloak);
 
     // A tattered hood — echoes the hunter's, corrupted.
-    const hoodMat = new THREE.MeshStandardMaterial({ color: 0x111a1c, roughness: 0.85 });
+    const hoodMat = Renderer3D._toonMat({ color: 0x111a1c, roughness: 0.85 });
     const hood = new THREE.Mesh(new THREE.ConeGeometry(rig.headRadius * 1.15, rig.headRadius * 2.6, 7, 1, true), hoodMat);
     hood.position.set(0, rig.headRadius * 0.55, -rig.headRadius * 0.3);
     hood.rotation.x = Math.PI * 0.94;
@@ -1341,7 +1400,7 @@ class Renderer3D {
 
     // A broken manacle and chain dangling from one wrist — a bound spirit, not just a fast
     // vampire, and the detail most likely to actually read at gameplay zoom given its motion.
-    const chainMat = new THREE.MeshStandardMaterial({ color: 0x5a6062, roughness: 0.4, metalness: 0.7 });
+    const chainMat = Renderer3D._toonMat({ color: 0x5a6062, roughness: 0.4, metalness: 0.7 });
     for (let i = 0; i < 4; i++) {
       const link = new THREE.Mesh(Renderer3D._geo().cylinder, chainMat);
       link.scale.set(0.7, 2.2, 0.7);
@@ -1351,7 +1410,7 @@ class Renderer3D {
     }
 
     // Long skeletal claws instead of ordinary hands.
-    const clawMat = new THREE.MeshStandardMaterial({ color: 0xe8f0f0 });
+    const clawMat = Renderer3D._toonMat({ color: 0xe8f0f0 });
     for (const elbow of [rig.elbowL, rig.elbowR]) {
       for (const cx of [-1, 0, 1]) {
         const claw = new THREE.Mesh(Renderer3D._geo().cone, clawMat);
@@ -1376,7 +1435,7 @@ class Renderer3D {
       texturePattern: 'fur',
     });
 
-    const earMat = new THREE.MeshStandardMaterial({ color: 0x140e08, roughness: 1 });
+    const earMat = Renderer3D._toonMat({ color: 0x140e08, roughness: 1 });
     for (const ex of [-1, 1]) {
       const ear = new THREE.Mesh(Renderer3D._geo().cone, earMat);
       ear.scale.set(3.4, 8, 3.4);
@@ -1390,7 +1449,7 @@ class Renderer3D {
     snout.scale.set(rig.headRadius * 0.58, rig.headRadius * 0.48, rig.headRadius * 1.05);
     snout.position.set(0, -rig.headRadius * 0.14, rig.headRadius * 0.9);
     rig.headGroup.add(snout);
-    const fangMat = new THREE.MeshStandardMaterial({ color: 0xf4eee0 });
+    const fangMat = Renderer3D._toonMat({ color: 0xf4eee0 });
     for (const fx of [-1.5, -0.5, 0.5, 1.5]) {
       const fang = new THREE.Mesh(Renderer3D._geo().cone, fangMat);
       fang.scale.set(0.7, 2.4, 0.7);
@@ -1400,7 +1459,7 @@ class Renderer3D {
     }
 
     // A thick mane around the neck/shoulders — the single biggest "this is the pack leader" tell.
-    const maneMat = new THREE.MeshStandardMaterial({ color: 0x1c140c, roughness: 1 });
+    const maneMat = Renderer3D._toonMat({ color: 0x1c140c, roughness: 1 });
     for (let i = 0; i < 7; i++) {
       const a = (i / 7) * Math.PI * 2;
       const spike = new THREE.Mesh(Renderer3D._geo().cone, maneMat);
@@ -1412,7 +1471,7 @@ class Renderer3D {
     }
 
     // Battle-scar gashes across the torso.
-    const scarMat = new THREE.MeshStandardMaterial({ color: 0x0c0806, roughness: 1 });
+    const scarMat = Renderer3D._toonMat({ color: 0x0c0806, roughness: 1 });
     for (const [sx, sy] of [[-3, 0.55], [2, 0.68]]) {
       const scar = new THREE.Mesh(Renderer3D._geo().box, scarMat);
       scar.scale.set(0.8, 9, 0.6);
@@ -1422,7 +1481,7 @@ class Renderer3D {
     }
 
     // A trophy necklace of bone/tooth fragments — pack-leader flavor.
-    const boneMat = new THREE.MeshStandardMaterial({ color: 0xe8e0c8, roughness: 0.7 });
+    const boneMat = Renderer3D._toonMat({ color: 0xe8e0c8, roughness: 0.7 });
     for (let i = 0; i < 5; i++) {
       const a = -0.9 + i * 0.45;
       const bone = new THREE.Mesh(Renderer3D._geo().cone, boneMat);
@@ -1433,7 +1492,7 @@ class Renderer3D {
     }
 
     // Heavier claws on every limb than the regular werewolf's.
-    const clawMat = new THREE.MeshStandardMaterial({ color: 0xe8e0d0 });
+    const clawMat = Renderer3D._toonMat({ color: 0xe8e0d0 });
     for (const knee of [rig.kneeL, rig.kneeR]) {
       const claw = new THREE.Mesh(Renderer3D._geo().cone, clawMat);
       claw.scale.set(1.6, 4, 1.6);
@@ -1472,7 +1531,7 @@ class Renderer3D {
   // ---------- Non-creature props ----------
   buildBaseModel(radius) {
     const group = new THREE.Group();
-    const stepMat = new THREE.MeshStandardMaterial({ color: 0x1e1826, roughness: 0.92 });
+    const stepMat = Renderer3D._toonMat({ color: 0x1e1826, roughness: 0.92 });
     const slab = new THREE.Mesh(Renderer3D._geo().box, stepMat);
     slab.scale.set(radius * 2.5, radius * 0.3, radius * 2.5);
     slab.position.y = radius * 0.15;
@@ -1480,7 +1539,7 @@ class Renderer3D {
     slab.castShadow = true;
     group.add(slab);
 
-    const topMat = new THREE.MeshStandardMaterial({ color: 0x352c3c, roughness: 0.85 });
+    const topMat = Renderer3D._toonMat({ color: 0x352c3c, roughness: 0.85 });
     const top = new THREE.Mesh(Renderer3D._geo().box, topMat);
     top.scale.set(radius * 2, radius * 0.5, radius * 2);
     top.position.y = radius * 0.3 + radius * 0.25;
@@ -1488,7 +1547,7 @@ class Renderer3D {
     top.receiveShadow = true;
     group.add(top);
 
-    const bloodMat = new THREE.MeshStandardMaterial({ color: 0x4a0508, roughness: 0.7 });
+    const bloodMat = Renderer3D._toonMat({ color: 0x4a0508, roughness: 0.7 });
     for (const dx of [-0.62, -0.18, 0.34, 0.7]) {
       const drip = new THREE.Mesh(Renderer3D._geo().capsule, bloodMat);
       const len = radius * (0.5 + 0.3 * Math.abs(Math.sin(dx * 9)));
@@ -1497,7 +1556,7 @@ class Renderer3D {
       group.add(drip);
     }
 
-    const glowMat = new THREE.MeshStandardMaterial({ color: 0x9628c3, emissive: 0x9628c3, emissiveIntensity: 1.8, roughness: 0.3 });
+    const glowMat = Renderer3D._toonMat({ color: 0x9628c3, emissive: 0x9628c3, emissiveIntensity: 1.8, roughness: 0.3 });
     const glow = new THREE.Mesh(Renderer3D._geo().sphere, glowMat);
     glow.scale.setScalar(radius * 0.4);
     glow.position.y = radius * 0.3 + radius * 0.5 + radius * 0.15;
@@ -1518,7 +1577,7 @@ class Renderer3D {
     const colors = [0x6b4a2a, 0x8a8a94, 0xb8b8c4];
     const color = colors[tierIndex];
     const group = new THREE.Group();
-    const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.85 });
+    const mat = Renderer3D._toonMat({ color, roughness: 0.85 });
     const width = 46;
     for (const px of [-width / 2 + 4, 0, width / 2 - 4]) {
       const post = new THREE.Mesh(Renderer3D._geo().cylinder, mat);
@@ -1535,7 +1594,7 @@ class Renderer3D {
       group.add(rail);
     }
     if (tierIndex >= 2) {
-      const sigilMat = new THREE.MeshStandardMaterial({ color: 0xb478f0, emissive: 0xb478f0, emissiveIntensity: 1.2 });
+      const sigilMat = Renderer3D._toonMat({ color: 0xb478f0, emissive: 0xb478f0, emissiveIntensity: 1.2 });
       const sigil = new THREE.Mesh(Renderer3D._geo().sphere, sigilMat);
       sigil.scale.setScalar(3);
       sigil.position.set(0, 14, 0);
@@ -1548,13 +1607,13 @@ class Renderer3D {
     const colors = [0x9646dc, 0x5aa0f0, 0xff5a28];
     const color = colors[tierIndex];
     const group = new THREE.Group();
-    const bodyMat = new THREE.MeshStandardMaterial({ color: 0x2a2018, roughness: 0.9 });
+    const bodyMat = Renderer3D._toonMat({ color: 0x2a2018, roughness: 0.9 });
     const body = new THREE.Mesh(Renderer3D._geo().cylinder, bodyMat);
     body.scale.set(13, 4, 13);
     body.position.y = 2;
     body.receiveShadow = true;
     group.add(body);
-    const glowMat = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 1.5 });
+    const glowMat = Renderer3D._toonMat({ color, emissive: color, emissiveIntensity: 1.5 });
     const glow = new THREE.Mesh(Renderer3D._geo().cylinder, glowMat);
     glow.scale.set(5.5, 0.8, 5.5);
     glow.position.y = 4.3;
@@ -1600,13 +1659,13 @@ class Renderer3D {
 
     if (weaponType === 'chakram') {
       lightColor = 0x9fd0ff;
-      const mat = new THREE.MeshStandardMaterial({ color: 0xcfd6dc, emissive: lightColor, emissiveIntensity: 1.2, metalness: 0.6, roughness: 0.3 });
+      const mat = Renderer3D._toonMat({ color: 0xcfd6dc, emissive: lightColor, emissiveIntensity: 1.2, metalness: 0.6, roughness: 0.3 });
       const ring = new THREE.Mesh(new THREE.TorusGeometry(4, 1, 6, 12), mat);
       ring.rotation.x = Math.PI / 2;
       group.add(ring);
     } else if (weaponType === 'blunderbuss') {
       lightColor = isCrit ? 0xffb060 : 0xd8d0c0;
-      const mat = new THREE.MeshStandardMaterial({ color: lightColor, emissive: lightColor, emissiveIntensity: 0.9, roughness: 0.35, metalness: 0.55 });
+      const mat = Renderer3D._toonMat({ color: lightColor, emissive: lightColor, emissiveIntensity: 0.9, roughness: 0.35, metalness: 0.55 });
       const slugR = isCrit ? 2.6 : 2.1;
       const slug = new THREE.Mesh(Renderer3D._geo().capsule, mat);
       slug.scale.set(slugR, slugR * 1.5, slugR);
@@ -1615,7 +1674,7 @@ class Renderer3D {
     } else if (weaponType === 'revolver') {
       // A small, fast silvered slug — visually the "little sibling" of the blunderbuss's shard.
       lightColor = isCrit ? 0xffe08c : 0xd4c090;
-      const mat = new THREE.MeshStandardMaterial({ color: 0xc8b878, emissive: lightColor, emissiveIntensity: 1.3, metalness: 0.7, roughness: 0.25 });
+      const mat = Renderer3D._toonMat({ color: 0xc8b878, emissive: lightColor, emissiveIntensity: 1.3, metalness: 0.7, roughness: 0.25 });
       const slugR = isCrit ? 1.9 : 1.5;
       const slug = new THREE.Mesh(Renderer3D._geo().capsule, mat);
       slug.scale.set(slugR, slugR * 1.8, slugR);
@@ -1625,7 +1684,7 @@ class Renderer3D {
       // Round buckshot balls rather than the blunderbuss's elongated shard — each pellet fires as
       // its own Bullet (see Player.tryFire's pellet loop), so this is one ball among a spread.
       lightColor = isCrit ? 0xffa050 : 0xc8b090;
-      const mat = new THREE.MeshStandardMaterial({ color: 0x8a7860, emissive: lightColor, emissiveIntensity: 0.85, roughness: 0.5, metalness: 0.4 });
+      const mat = Renderer3D._toonMat({ color: 0x8a7860, emissive: lightColor, emissiveIntensity: 0.85, roughness: 0.5, metalness: 0.4 });
       const pelletR = isCrit ? 2.5 : 2;
       const pellet = new THREE.Mesh(Renderer3D._geo().sphere, mat);
       pellet.scale.setScalar(pelletR);
@@ -1633,7 +1692,7 @@ class Renderer3D {
     } else if (weaponType === 'gatling') {
       // A thin bright tracer, built to read clearly even when a dozen are in flight at once.
       lightColor = isCrit ? 0xfff0a0 : 0xffd070;
-      const mat = new THREE.MeshStandardMaterial({ color: 0xb8935a, emissive: lightColor, emissiveIntensity: 1.7, metalness: 0.75, roughness: 0.2 });
+      const mat = Renderer3D._toonMat({ color: 0xb8935a, emissive: lightColor, emissiveIntensity: 1.7, metalness: 0.75, roughness: 0.2 });
       const len = isCrit ? 11 : 8.5;
       const tracer = new THREE.Mesh(Renderer3D._geo().cylinder, mat);
       tracer.scale.set(0.85, len, 0.85);
@@ -1643,12 +1702,12 @@ class Renderer3D {
       // A burning censer-orb with a thin swinging chain loop, so it reads as a lobbed vessel
       // rather than just a bigger bullet — the blast on impact is the payoff (see game.js).
       lightColor = isCrit ? 0xff6a20 : 0xff9040;
-      const orbMat = new THREE.MeshStandardMaterial({ color: 0x3a2216, emissive: lightColor, emissiveIntensity: 2.2, roughness: 0.6, metalness: 0.3 });
+      const orbMat = Renderer3D._toonMat({ color: 0x3a2216, emissive: lightColor, emissiveIntensity: 2.2, roughness: 0.6, metalness: 0.3 });
       const orbR = isCrit ? 6.2 : 5.2;
       const orb = new THREE.Mesh(Renderer3D._geo().sphere, orbMat);
       orb.scale.setScalar(orbR);
       group.add(orb);
-      const chainMat = new THREE.MeshStandardMaterial({ color: 0x2a2018, roughness: 0.6, metalness: 0.6 });
+      const chainMat = Renderer3D._toonMat({ color: 0x2a2018, roughness: 0.6, metalness: 0.6 });
       const chain = new THREE.Mesh(new THREE.TorusGeometry(orbR * 0.7, 0.6, 5, 10), chainMat);
       chain.rotation.x = Math.PI / 2;
       chain.position.y = orbR * 0.9;
@@ -1657,20 +1716,20 @@ class Renderer3D {
       // Crossbow bolt: fletched shaft with a glowing arrowhead, angled to actually look like an arrow.
       lightColor = isCrit ? 0xff8c3c : 0xe0c068;
       const shaftLen = isCrit ? 20 : 16;
-      const shaftMat = new THREE.MeshStandardMaterial({ color: 0x5a4a3a, roughness: 0.85 });
+      const shaftMat = Renderer3D._toonMat({ color: 0x5a4a3a, roughness: 0.85 });
       const shaft = new THREE.Mesh(Renderer3D._geo().cylinder, shaftMat);
       shaft.scale.set(0.6, shaftLen, 0.6);
       shaft.rotation.z = Math.PI / 2;
       group.add(shaft);
 
-      const headMat = new THREE.MeshStandardMaterial({ color: lightColor, emissive: lightColor, emissiveIntensity: 1.4 });
+      const headMat = Renderer3D._toonMat({ color: lightColor, emissive: lightColor, emissiveIntensity: 1.4 });
       const head = new THREE.Mesh(Renderer3D._geo().cone, headMat);
       head.scale.set(1.6, 4, 1.6);
       head.rotation.z = -Math.PI / 2;
       head.position.x = shaftLen / 2 + 1.5;
       group.add(head);
 
-      const finMat = new THREE.MeshStandardMaterial({ color: 0x2e2318, side: THREE.DoubleSide });
+      const finMat = Renderer3D._toonMat({ color: 0x2e2318, side: THREE.DoubleSide });
       for (const fz of [-1, 1]) {
         const fin = new THREE.Mesh(new THREE.PlaneGeometry(4.5, 2.2), finMat);
         fin.position.set(-shaftLen / 2 + 1.5, 0, fz * 0.7);
