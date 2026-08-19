@@ -1783,6 +1783,15 @@
         childGeoTypes: v ? v.group.children.map((c) => c.geometry ? c.geometry.type : c.type) : null,
       };
     }),
+    debugPlayerWeaponView: () => {
+      const v = renderer3d.playerView;
+      if (!v || !v.weaponVisual) return null;
+      return {
+        equippedWeaponTag: v.equippedWeaponTag,
+        childCount: v.weaponVisual.children.length,
+        childGeoTypes: v.weaponVisual.children.map((c) => c.geometry ? c.geometry.type : c.type),
+      };
+    },
     debugSetPrepCountdown: (s) => { prepCountdown = s; },
     debugSetWaveClearTimer: (s) => { waveClearTimer = s; },
     debugViewField: () => el.viewFieldBtn.click(),

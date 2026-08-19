@@ -825,7 +825,7 @@ class Renderer3D {
     };
   }
 
-  buildPlayerModel() {
+  buildPlayerModel(equippedWeapon = 'crossbow') {
     const rig = this._buildCreatureBase({
       legLen: 30, legRadius: 5, torsoLen: 34, torsoRadius: 11, headRadius: 8,
       skinColor: 0x6b5040, eyeColor: 0xf0d98c, limbColor: 0x3a2a20, torsoColor: 0x5a4030,
@@ -855,29 +855,191 @@ class Renderer3D {
     strap.castShadow = true;
     rig.group.add(strap);
 
-    // The barrel reaches exactly PLAYER_MUZZLE_DISTANCE (entities.js) from the group origin, so
-    // Player.getMuzzlePosition() — where bullets actually spawn — always matches the visible tip.
+    // The weapon's own forward reach targets PLAYER_MUZZLE_DISTANCE (entities.js) from the group
+    // origin, so Player.getMuzzlePosition() — where bullets actually spawn — lines up with
+    // wherever each weapon's own barrel/tip actually ends. The pivot holds whichever weapon is
+    // currently equipped; syncPlayer swaps its contents when player.equippedWeapon changes
+    // (see _buildWeaponVisual and _swapPlayerWeapon), instead of one fixed generic gun for every
+    // weapon in the game.
     const weaponPivot = new THREE.Group();
     weaponPivot.position.set(rig.torsoRadius * 0.9, PLAYER_MUZZLE_HEIGHT, 0);
     const muzzleReach = PLAYER_MUZZLE_DISTANCE - weaponPivot.position.x;
-    const weaponMat = new THREE.MeshStandardMaterial({ color: 0x8a8a94, roughness: 0.4, metalness: 0.6 });
-    const weaponBar = new THREE.Mesh(Renderer3D._geo().cylinder, weaponMat);
-    weaponBar.scale.set(1.3, muzzleReach, 1.3);
-    weaponBar.rotation.z = Math.PI / 2;
-    weaponBar.position.x = muzzleReach / 2;
-    weaponBar.castShadow = true;
-    weaponPivot.add(weaponBar);
-    const tipMat = new THREE.MeshStandardMaterial({ color: 0xf0d98c, emissive: 0xf0d98c, emissiveIntensity: 1.6 });
-    const tip = new THREE.Mesh(Renderer3D._geo().sphere, tipMat);
-    tip.scale.setScalar(1.8);
-    tip.position.x = muzzleReach;
-    weaponPivot.add(tip);
-    const tipGlow = this._makeGlowSprite(0xf0d98c, 10, 0.85);
-    tipGlow.position.copy(tip.position);
-    weaponPivot.add(tipGlow);
+    const weaponVisual = this._buildWeaponVisual(equippedWeapon, muzzleReach);
+    weaponPivot.add(weaponVisual);
     rig.group.add(weaponPivot);
 
-    return { ...rig, cloak, weaponPivot };
+    return { ...rig, cloak, weaponPivot, weaponVisual, muzzleReach, equippedWeaponTag: equippedWeapon };
+  }
+
+  /** Builds the held weapon model for whichever weapon is currently equipped — swapped in/out by
+   *  syncPlayer via _swapPlayerWeapon whenever player.equippedWeapon changes, so the hunter's
+   *  hands actually carry a six-shooter, a gatling cluster, a censer-launcher, etc. instead of one
+   *  generic bar-and-glow-tip for every weapon in the game. Every silhouette is sized against
+   *  muzzleReach so its forward-most point (barrel tip, launcher mouth) lands at or near the same
+   *  world position bullets actually spawn from, regardless of how long or short that weapon reads. */
+  _buildWeaponVisual(weaponType, muzzleReach) {
+    const group = new THREE.Group();
+    const metalMat = new THREE.MeshStandardMaterial({ color: 0x8a8a94, roughness: 0.4, metalness: 0.6 });
+    const darkMetalMat = new THREE.MeshStandardMaterial({ color: 0x5a5a62, roughness: 0.45, metalness: 0.65 });
+    const woodMat = new THREE.MeshStandardMaterial({ color: 0x2a1c14, roughness: 0.8 });
+    const tipMat = new THREE.MeshStandardMaterial({ color: 0xf0d98c, emissive: 0xf0d98c, emissiveIntensity: 1.6 });
+
+    const addTipGlow = (x, size = 1.8, glowSize = 10) => {
+      const tip = new THREE.Mesh(Renderer3D._geo().sphere, tipMat);
+      tip.scale.setScalar(size);
+      tip.position.x = x;
+      group.add(tip);
+      const glow = this._makeGlowSprite(0xf0d98c, glowSize, 0.85);
+      glow.position.copy(tip.position);
+      group.add(glow);
+    };
+
+    if (weaponType === 'revolver') {
+      // Short and stubby — a sidearm, not a long-arm — with a cylinder drum and an angled grip so
+      // it reads as a six-shooter instead of just a smaller version of everything else.
+      const len = muzzleReach * 0.5;
+      const barrel = new THREE.Mesh(Renderer3D._geo().cylinder, darkMetalMat);
+      barrel.scale.set(1.3, len, 1.3);
+      barrel.rotation.z = Math.PI / 2;
+      barrel.position.x = len / 2;
+      barrel.castShadow = true;
+      group.add(barrel);
+      const drum = new THREE.Mesh(Renderer3D._geo().cylinder, metalMat);
+      drum.scale.set(2.1, 2.4, 2.1);
+      drum.position.x = len * 0.3;
+      group.add(drum);
+      const grip = new THREE.Mesh(Renderer3D._geo().box, woodMat);
+      grip.scale.set(1.6, 5.5, 2.2);
+      grip.position.set(-0.5, -3, 0);
+      grip.rotation.z = 0.4;
+      group.add(grip);
+      addTipGlow(len, 1.2, 6);
+    } else if (weaponType === 'coachgun') {
+      // Two parallel barrels — the double-barrel silhouette is the whole point.
+      const len = muzzleReach * 0.85;
+      for (const bz of [-1.4, 1.4]) {
+        const barrel = new THREE.Mesh(Renderer3D._geo().cylinder, darkMetalMat);
+        barrel.scale.set(1.1, len, 1.1);
+        barrel.rotation.z = Math.PI / 2;
+        barrel.position.set(len / 2, 0, bz);
+        barrel.castShadow = true;
+        group.add(barrel);
+        const tip = new THREE.Mesh(Renderer3D._geo().sphere, tipMat);
+        tip.scale.setScalar(1);
+        tip.position.set(len, 0, bz);
+        group.add(tip);
+      }
+      const stock = new THREE.Mesh(Renderer3D._geo().box, woodMat);
+      stock.scale.set(3.5, 3.2, 4.2);
+      stock.position.x = -1.5;
+      group.add(stock);
+    } else if (weaponType === 'gatling') {
+      // A cluster of barrels around a central shaft, plus a side crank — the classic hand-cranked
+      // gatling silhouette, built to read even at gameplay zoom.
+      const len = muzzleReach;
+      const shaft = new THREE.Mesh(Renderer3D._geo().cylinder, woodMat);
+      shaft.scale.set(1.4, len * 0.6, 1.4);
+      shaft.rotation.z = Math.PI / 2;
+      shaft.position.x = len * 0.3;
+      group.add(shaft);
+      for (let i = 0; i < 5; i++) {
+        const a = (i / 5) * Math.PI * 2;
+        const barrel = new THREE.Mesh(Renderer3D._geo().cylinder, darkMetalMat);
+        barrel.scale.set(0.75, len, 0.75);
+        barrel.rotation.z = Math.PI / 2;
+        barrel.position.set(len / 2, Math.cos(a) * 2.2, Math.sin(a) * 2.2);
+        barrel.castShadow = true;
+        group.add(barrel);
+      }
+      const crank = new THREE.Mesh(Renderer3D._geo().cylinder, metalMat);
+      crank.scale.set(0.7, 4, 0.7);
+      crank.position.set(len * 0.15, -2.5, 3);
+      crank.rotation.x = 0.5;
+      group.add(crank);
+      addTipGlow(len, 1, 7);
+    } else if (weaponType === 'thurible') {
+      // A chunky launcher tube with a hanging chain and censer-ball — echoes the shell it fires
+      // (see buildBulletModel), so the weapon and its projectile read as the same object.
+      const len = muzzleReach * 0.75;
+      const tube = new THREE.Mesh(Renderer3D._geo().cylinder, darkMetalMat);
+      tube.scale.set(2.6, len, 2.6);
+      tube.rotation.z = Math.PI / 2;
+      tube.position.x = len / 2;
+      tube.castShadow = true;
+      group.add(tube);
+      const censerMat = new THREE.MeshStandardMaterial({ color: 0x3a2216, emissive: 0xff9040, emissiveIntensity: 1.4, roughness: 0.6 });
+      const censer = new THREE.Mesh(Renderer3D._geo().sphere, censerMat);
+      censer.scale.setScalar(2.4);
+      censer.position.set(len * 0.3, -3.5, 2.5);
+      group.add(censer);
+      const chainMat = new THREE.MeshStandardMaterial({ color: 0x2a2018, roughness: 0.6, metalness: 0.6 });
+      const chain = new THREE.Mesh(new THREE.TorusGeometry(1.4, 0.35, 5, 8), chainMat);
+      chain.position.set(len * 0.3, -1.2, 2.5);
+      chain.rotation.x = Math.PI / 2;
+      group.add(chain);
+      const glow = this._makeGlowSprite(0xff9040, 6, 0.7);
+      glow.position.copy(censer.position);
+      group.add(glow);
+    } else if (weaponType === 'chakram') {
+      // No barrel at all — a flat, glowing ring held forward at the ready, since it's thrown
+      // rather than fired from a gun.
+      const ringMat = new THREE.MeshStandardMaterial({ color: 0xcfd6dc, emissive: 0x9fd0ff, emissiveIntensity: 1, metalness: 0.6, roughness: 0.3 });
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(5, 1.1, 6, 14), ringMat);
+      ring.position.x = muzzleReach * 0.55;
+      ring.rotation.y = Math.PI / 2;
+      group.add(ring);
+      const glow = this._makeGlowSprite(0x9fd0ff, 8, 0.6);
+      glow.position.copy(ring.position);
+      group.add(glow);
+    } else if (weaponType === 'blunderbuss') {
+      // A short stock into a flared trumpet muzzle — the wide-mouth silhouette a blunderbuss is
+      // named for, distinct from the crossbow's straight shaft.
+      const len = muzzleReach * 0.7;
+      const barrel = new THREE.Mesh(Renderer3D._geo().cylinder, darkMetalMat);
+      barrel.scale.set(1.4, len, 1.4);
+      barrel.rotation.z = Math.PI / 2;
+      barrel.position.x = len / 2;
+      barrel.castShadow = true;
+      group.add(barrel);
+      const flare = new THREE.Mesh(new THREE.ConeGeometry(3.2, 5, 10, 1, true), metalMat);
+      flare.rotation.z = -Math.PI / 2;
+      flare.position.x = len + 1;
+      group.add(flare);
+      const stock = new THREE.Mesh(Renderer3D._geo().box, woodMat);
+      stock.scale.set(2.6, 3, 3.2);
+      stock.position.x = -1.5;
+      group.add(stock);
+    } else {
+      // Crossbow default: a stock with a horizontal bow-limb crossing it — the T-shaped
+      // silhouette that actually reads as a crossbow instead of a generic bar.
+      const barrel = new THREE.Mesh(Renderer3D._geo().cylinder, metalMat);
+      barrel.scale.set(1.3, muzzleReach, 1.3);
+      barrel.rotation.z = Math.PI / 2;
+      barrel.position.x = muzzleReach / 2;
+      barrel.castShadow = true;
+      group.add(barrel);
+      const limb = new THREE.Mesh(Renderer3D._geo().cylinder, darkMetalMat);
+      limb.scale.set(0.7, 13, 0.7);
+      limb.rotation.x = Math.PI / 2;
+      limb.position.x = muzzleReach * 0.4;
+      limb.castShadow = true;
+      group.add(limb);
+      addTipGlow(muzzleReach, 1.8, 10);
+    }
+
+    return group;
+  }
+
+  /** Swaps the held weapon model in place when player.equippedWeapon changes — disposes the old
+   *  visual's materials (geometries are shared/cached via Renderer3D._geo() and never disposed,
+   *  same convention as _disposeView) and rebuilds fresh for the new weapon. */
+  _swapPlayerWeapon(weaponType) {
+    const v = this.playerView;
+    v.weaponPivot.remove(v.weaponVisual);
+    this._disposeView({ group: v.weaponVisual });
+    v.weaponVisual = this._buildWeaponVisual(weaponType, v.muzzleReach);
+    v.weaponPivot.add(v.weaponVisual);
+    v.equippedWeaponTag = weaponType;
   }
 
   buildZombieModel() {
@@ -1581,10 +1743,11 @@ class Renderer3D {
 
   syncPlayer(player, time = 0) {
     if (!this.playerView) {
-      this.playerView = this.buildPlayerModel();
+      this.playerView = this.buildPlayerModel(player.equippedWeapon);
       this.scene.add(this.playerView.group);
     }
     const v = this.playerView;
+    if (v.equippedWeaponTag !== player.equippedWeapon) this._swapPlayerWeapon(player.equippedWeapon);
     v.group.position.set(this.worldX(player.x), 0, this.worldZ(player.y));
     v.group.rotation.y = this.yawFromAngle(player.aimAngle);
     const swing = player._isMoving ? Math.sin(player._walkPhase) : 0;
