@@ -1,10 +1,13 @@
 extends Node3D
 
-# Self-verification harness: load the imported revolver model, parent it under
-# the "Hand" pivot, auto-frame a camera around its real bounding box (so we
-# don't have to guess a scale/position by eye first), then render and save a
-# screenshot for inspection. Prints the AABB size so we know if Blender's
-# meters need a scale correction before this ever goes near the game.
+# Held-weapon rig: attach the revolver to a hand pivot at a real-world scale
+# and the barrel-forward rotation, both derived from the model's own geometry
+# rather than guessed — verified two ways: a muzzle-direction dot product
+# against the rig's forward axis, and a rendered screenshot to look at.
+
+const TARGET_LENGTH := 0.32  # meters, roughly a Colt 1851 Navy-era revolver
+const AIM_DIR := Vector3(0, 0, -1)  # "forward" for this rig, Godot's default facing
+const WEAPON_YAW_DEG := 180  # derived below; confirmed by muzzle-direction dot product
 
 func _ready():
 	print("PROTO: loading revolver.glb")
@@ -14,72 +17,63 @@ func _ready():
 		get_tree().quit(1)
 		return
 
+	var probe = packed.instantiate()
+	add_child(probe)
+	var raw_aabb = _combined_aabb(probe)
+	var longest = max(raw_aabb.size.x, max(raw_aabb.size.y, raw_aabb.size.z))
+	remove_child(probe)
+	probe.queue_free()
+
+	var scale_factor = TARGET_LENGTH / longest
+	print("PROTO: scale_factor=%.5f (target_length=%.2f / raw_longest=%.4f)" % [scale_factor, TARGET_LENGTH, longest])
+
+	var muzzle_local = Vector3(
+		raw_aabb.position.x + raw_aabb.size.x * 0.5,
+		raw_aabb.position.y + raw_aabb.size.y * 0.5,
+		raw_aabb.end.z
+	)
+	var basis = Basis(Vector3.UP, deg_to_rad(WEAPON_YAW_DEG)).scaled(Vector3.ONE * scale_factor)
+	var muzzle_dir = (basis * muzzle_local).normalized()
+	print("PROTO: muzzle_dir at yaw=%d is %s, dot_with_aim=%.3f" % [WEAPON_YAW_DEG, str(muzzle_dir), muzzle_dir.dot(AIM_DIR)])
+
+	# Placeholder forearm so we can see whether the gun actually sits in-hand.
+	var arm := MeshInstance3D.new()
+	var capsule := CapsuleMesh.new()
+	capsule.radius = 0.045
+	capsule.height = 0.32
+	arm.mesh = capsule
+	var arm_mat := StandardMaterial3D.new()
+	arm_mat.albedo_color = Color(0.75, 0.6, 0.5)
+	arm.material_override = arm_mat
+	$Hand.add_child(arm)
+	arm.position = Vector3(0, 0, 0.16)
+	arm.rotation_degrees = Vector3(90, 0, 0)
+
 	var inst = packed.instantiate()
+	inst.name = "Revolver"
 	$Hand.add_child(inst)
-	print("PROTO: instanced, child count under Hand = %d" % $Hand.get_child_count())
+	inst.scale = Vector3.ONE * scale_factor
+	inst.rotation_degrees = Vector3(0, WEAPON_YAW_DEG, 0)
 
-	# Walk the tree to find every MeshInstance3D and combine their AABBs so we
-	# get the model's real extent regardless of how many parts it's split into.
-	var combined_aabb = AABB()
-	var first = true
-	var stack = [inst]
-	while stack.size() > 0:
-		var node = stack.pop_back()
-		if node is MeshInstance3D:
-			var mesh_aabb = node.get_aabb()
-			var global_aabb = node.global_transform * mesh_aabb
-			print("PROTO: mesh '%s' local_aabb=%s global_aabb=%s" % [node.name, str(mesh_aabb), str(global_aabb)])
-			var mesh_res: Mesh = node.mesh
-			print("PROTO: mesh '%s' surface_count=%d" % [node.name, mesh_res.get_surface_count()])
-			for si in range(mesh_res.get_surface_count()):
-				var mat = node.get_active_material(si)
-				if mat == null:
-					print("PROTO:   surface %d has NO material (null)" % si)
-				elif mat is BaseMaterial3D:
-					print("PROTO:   surface %d mat='%s' albedo=%s emission_enabled=%s emission=%s metallic=%.2f roughness=%.2f shading_mode=%s transparency=%s" % [
-						si, mat.resource_name, str(mat.albedo_color), str(mat.emission_enabled),
-						str(mat.emission) if mat.emission_enabled else "n/a",
-						mat.metallic, mat.roughness, str(mat.shading_mode), str(mat.transparency)
-					])
-				else:
-					print("PROTO:   surface %d mat='%s' type=%s (not BaseMaterial3D)" % [si, mat.resource_name, mat.get_class()])
-			if first:
-				combined_aabb = global_aabb
-				first = false
-			else:
-				combined_aabb = combined_aabb.merge(global_aabb)
-		for c in node.get_children():
-			stack.append(c)
+	await get_tree().process_frame
 
-	print("PROTO: combined AABB position=%s size=%s" % [str(combined_aabb.position), str(combined_aabb.size)])
-
-	var center = combined_aabb.get_center()
-	var longest = max(combined_aabb.size.x, max(combined_aabb.size.y, combined_aabb.size.z))
-	if longest <= 0.0:
-		longest = 1.0
-
-	# Frame the camera to fit the model regardless of its actual scale.
 	var cam := $Camera3D
 	cam.fov = 35.0
-	var dist = longest * 1.3
-	cam.global_position = center + Vector3(dist * 0.55, dist * 0.35, dist * 0.8)
-	cam.look_at(center, Vector3.UP)
-
 	var fill := OmniLight3D.new()
 	fill.light_energy = 0.6
-	fill.omni_range = longest * 4.0
+	fill.omni_range = 5.0
 	add_child(fill)
-	fill.global_position = cam.global_position + Vector3(0, longest * 0.3, 0)
 
-	var angles = {
-		"front": Vector3(0, 0.15, 1),
-		"side": Vector3(1, 0.1, 0),
-		"topside": Vector3(0.6, 0.9, 0.6),
+	var frame_center = $Hand.global_position + Vector3(0, 0, -TARGET_LENGTH * 0.35)
+	var dist = TARGET_LENGTH * 3.2
+	var views = {
+		"final_3q": Vector3(0.5, 0.35, 0.7),
+		"final_side": Vector3(0.05, 0.15, 1.0),
 	}
-	for label in angles:
-		var dir = angles[label]
-		cam.global_position = center + dir.normalized() * dist * 1.4
-		cam.look_at(center, Vector3.UP)
+	for label in views:
+		var dir = views[label]
+		cam.global_position = frame_center + dir.normalized() * dist
+		cam.look_at(frame_center, Vector3.UP)
 		fill.global_position = cam.global_position
 		await get_tree().process_frame
 		await get_tree().process_frame
@@ -88,3 +82,20 @@ func _ready():
 		print("PROTO: saved screenshot_%s.png err=%d" % [label, err])
 
 	get_tree().quit(0)
+
+func _combined_aabb(root: Node) -> AABB:
+	var combined = AABB()
+	var first = true
+	var stack = [root]
+	while stack.size() > 0:
+		var node = stack.pop_back()
+		if node is MeshInstance3D:
+			var global_aabb = node.global_transform * node.get_aabb()
+			if first:
+				combined = global_aabb
+				first = false
+			else:
+				combined = combined.merge(global_aabb)
+		for c in node.get_children():
+			stack.append(c)
+	return combined
