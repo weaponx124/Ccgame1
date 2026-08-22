@@ -31,7 +31,7 @@ const PLAYER_MUZZLE_HEIGHT = 64;
 //              this game's rig convention of local +X as forward (see yawFromAngle above) —
 //              Math.PI / 2 is the usual fix for a model built facing Blender's default front.
 const GLTF_WEAPON_ASSETS = {
-  revolver: { url: 'src/assets/models/revolver.glb', scale: 3.4, rotationY: Math.PI / 2 },
+  revolver: { url: 'src/assets/models/revolver.glb', scale: 3.4, rotationY: Math.PI / 2, rollZ: 0.7 },
 };
 
 class Renderer3D {
@@ -138,6 +138,14 @@ class Renderer3D {
           glow.position.copy(tipPoint);
           model.add(glow);
 
+          // A revolver's identity depends on its L-shaped bend (barrel + drooping grip) — but that
+          // bend sits along the model's own vertical axis, and a rotation.y yaw never touches the
+          // vertical axis at all, so from this game's steep top-down camera the bend is foreshortened
+          // to nothing and only the straight barrel is visible (reading as an arrow, not a gun).
+          // Rolling around the model's own pre-yaw Z axis (its barrel axis, before yaw is applied)
+          // swings that vertical droop into the horizontal plane instead, where a top-down camera
+          // can actually show it as a sideways offset from the barrel.
+          model.rotation.z = asset.rollZ || 0;
           model.scale.setScalar(asset.scale || 1);
           model.rotation.y = asset.rotationY || 0;
           const realMeshes = [];
@@ -151,11 +159,24 @@ class Renderer3D {
               // flat white where a toon one physically can't. Rebuilding it through the same
               // gradient-mapped pipeline keeps a real asset visually consistent with everything
               // else instead of overexposing on arrival.
+              //
+              // A hard-surface model built without a texture pass (this one included) commonly
+              // leaves every material at a blank white base color, relying on metalness/roughness
+              // alone for differentiation — which a flat-shaded toon material can't reproduce, so
+              // an untextured model reads as one uniform pale shape (at this game's small on-screen
+              // scale, indistinguishable from a plain pale shaft — an arrow, not a gun). Where a
+              // material has no real authored color (near-white, no texture), synthesize one from
+              // its metalness instead of copying the blank white through: dark gunmetal for the
+              // metallic surfaces, a warmer tone for non-metallic ones — the same two-tone split a
+              // texture pass would eventually add, just derived automatically in the meantime.
               const srcMats = Array.isArray(obj.material) ? obj.material : [obj.material];
-              const toonMats = srcMats.map((m) => Renderer3D._toonMat({
-                color: m.color ? m.color.clone() : 0xffffff,
-                map: m.map || null,
-              }));
+              const toonMats = srcMats.map((m) => {
+                const isBlank = !m.map && (!m.color || (m.color.r > 0.9 && m.color.g > 0.9 && m.color.b > 0.9));
+                const color = isBlank
+                  ? ((m.metalness || 0) > 0.5 ? 0x84848c : 0xa08858)
+                  : m.color.clone();
+                return Renderer3D._toonMat({ color, map: m.map || null });
+              });
               obj.material = Array.isArray(obj.material) ? toonMats : toonMats[0];
               realMeshes.push(obj);
             }
