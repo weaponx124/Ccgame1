@@ -31,7 +31,7 @@ const PLAYER_MUZZLE_HEIGHT = 64;
 //              this game's rig convention of local +X as forward (see yawFromAngle above) —
 //              Math.PI / 2 is the usual fix for a model built facing Blender's default front.
 const GLTF_WEAPON_ASSETS = {
-  revolver: { url: 'src/assets/models/revolver.glb', scale: 2.7, rotationY: Math.PI / 2 },
+  revolver: { url: 'src/assets/models/revolver.glb', scale: 3.4, rotationY: Math.PI / 2 },
 };
 
 class Renderer3D {
@@ -140,6 +140,7 @@ class Renderer3D {
 
           model.scale.setScalar(asset.scale || 1);
           model.rotation.y = asset.rotationY || 0;
+          const realMeshes = [];
           model.traverse((obj) => {
             if (obj.isMesh && !obj.userData.isGlowTip) {
               obj.castShadow = true;
@@ -156,8 +157,26 @@ class Renderer3D {
                 map: m.map || null,
               }));
               obj.material = Array.isArray(obj.material) ? toonMats : toonMats[0];
+              realMeshes.push(obj);
             }
           });
+
+          // A real gun's cross-section is flat/rectangular, unlike every procedural weapon's round
+          // cylinders — a cylinder looks equally chunky from any angle, but a flat shape presents
+          // its knife-thin edge from this game's steep top-down camera and all but disappears (a
+          // real player reported not being able to see it at all). The same moonlit-silver outline
+          // shell that makes character silhouettes read against dark scenes (_makeOutlineShell)
+          // fixes this for the same reason: it gives the whole weapon a bright edge that's visible
+          // regardless of which face happens to be angled toward the camera, added per-mesh (not
+          // once for the whole model) so each mesh's own local transform is preserved exactly.
+          for (const obj of realMeshes) {
+            const shell = this._makeOutlineShell(obj.geometry, 1.18);
+            shell.position.copy(obj.position);
+            shell.rotation.copy(obj.rotation);
+            shell.scale.copy(obj.scale).multiplyScalar(1.18);
+            obj.parent.add(shell);
+          }
+
           this._gltfCache[key] = model;
         },
         undefined,
