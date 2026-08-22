@@ -29,6 +29,20 @@ func _ready():
 			var mesh_aabb = node.get_aabb()
 			var global_aabb = node.global_transform * mesh_aabb
 			print("PROTO: mesh '%s' local_aabb=%s global_aabb=%s" % [node.name, str(mesh_aabb), str(global_aabb)])
+			var mesh_res: Mesh = node.mesh
+			print("PROTO: mesh '%s' surface_count=%d" % [node.name, mesh_res.get_surface_count()])
+			for si in range(mesh_res.get_surface_count()):
+				var mat = node.get_active_material(si)
+				if mat == null:
+					print("PROTO:   surface %d has NO material (null)" % si)
+				elif mat is BaseMaterial3D:
+					print("PROTO:   surface %d mat='%s' albedo=%s emission_enabled=%s emission=%s metallic=%.2f roughness=%.2f shading_mode=%s transparency=%s" % [
+						si, mat.resource_name, str(mat.albedo_color), str(mat.emission_enabled),
+						str(mat.emission) if mat.emission_enabled else "n/a",
+						mat.metallic, mat.roughness, str(mat.shading_mode), str(mat.transparency)
+					])
+				else:
+					print("PROTO:   surface %d mat='%s' type=%s (not BaseMaterial3D)" % [si, mat.resource_name, mat.get_class()])
 			if first:
 				combined_aabb = global_aabb
 				first = false
@@ -52,7 +66,7 @@ func _ready():
 	cam.look_at(center, Vector3.UP)
 
 	var fill := OmniLight3D.new()
-	fill.light_energy = 3.0
+	fill.light_energy = 0.6
 	fill.omni_range = longest * 4.0
 	add_child(fill)
 	fill.global_position = cam.global_position + Vector3(0, longest * 0.3, 0)
