@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<title>Nightward</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22><rect width=%2232%22 height=%2232%22 fill=%22%23050308%22/><path d=%22M16 5 L23 12 L20 27 L16 23 L12 27 L9 12 Z%22 fill=%22%237d1f2e%22 stroke=%22%23c9a44c%22 stroke-width=%221%22/></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css?v=20260822a">
+</head>
+<body>
+  <div id="rotate-overlay">
+    <div id="rotate-panel">
+      <div id="rotate-icon">&#128241;</div>
+      <p>Rotate your device to landscape to play.</p>
+    </div>
+  </div>
+
+  <div id="game-container">
+   <div id="stage">
+    <canvas id="game-canvas" width="960" height="540"></canvas>
+    <canvas id="fx-canvas" width="960" height="540"></canvas>
+
+    <button id="pause-btn" class="hidden" aria-label="Pause menu">&#10074;&#10074;</button>
+    <button id="mute-btn" aria-label="Mute sound">&#128266;</button>
+    <button id="weapon-switch-btn" class="hidden" aria-label="Swap weapon">Crossbow</button>
+    <div id="fps-counter"></div>
+
+    <div id="hud">
+      <div id="hud-left">
+        <div class="hud-row">Wave: <span id="wave-num">1</span></div>
+        <div class="hud-row">Enemies: <span id="enemies-left">0</span></div>
+      </div>
+      <div id="hud-center">
+        <div class="bar" id="base-health-bar">
+          <div class="bar-fill" id="base-health-fill"></div>
+          <span class="bar-label">Ward HP: <span id="base-health-text"></span></span>
+        </div>
+        <div class="bar" id="player-health-bar">
+          <div class="bar-fill" id="player-health-fill"></div>
+          <span class="bar-label">HP: <span id="player-health-text"></span></span>
+        </div>
+      </div>
+      <div id="hud-right">
+        <div class="hud-row">Gold: <span id="gold-amount">0</span></div>
+      </div>
+    </div>
+
+    <div id="boss-health-bar" class="hidden">
+      <div id="boss-health-name"></div>
+      <div class="bar" id="boss-health-track">
+        <div class="bar-fill" id="boss-health-fill"></div>
+      </div>
+    </div>
+
+    <div id="boss-warning" class="hidden"><span id="boss-warning-name"></span> arrives in <span id="boss-warning-secs">0</span>s</div>
+
+    <div id="shop-overlay" class="hidden">
+      <div id="shop-panel">
+        <h2 id="shop-title">Wave Cleared!</h2>
+        <p id="shop-subtitle">Spend your gold before the next wave descends.</p>
+        <div id="prep-countdown">
+          <div class="bar" id="prep-countdown-bar"><div class="bar-fill" id="prep-countdown-fill"></div></div>
+          <span id="prep-countdown-text">25s</span>
+        </div>
+        <div id="shop-items"></div>
+        <h3 class="shop-section-title">Weapons</h3>
+        <div id="weapon-items"></div>
+        <h3 class="shop-section-title">Defenses</h3>
+        <div id="defense-items"></div>
+        <p id="defense-hint" class="shop-hint">Buying a tier here only arms new placements. To upgrade, move, or rotate a fence/mine you've already placed, tap <strong>View Field</strong> below, then tap it on the battlefield.</p>
+        <div id="shop-actions-row">
+          <button id="view-field-btn" class="btn-secondary">View Field<span id="view-field-badge" class="badge-dot hidden"></span></button>
+          <button id="next-wave-btn">Start Next Wave &rarr;</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="placement-bar" class="hidden">
+      <p id="placement-prompt">Tap the battlefield to place your defense.</p>
+      <button id="placement-rotate-btn" class="btn-secondary hidden">Rotate &#8635;</button>
+      <button id="placement-cancel-btn" class="btn-secondary">Cancel</button>
+    </div>
+
+    <div id="wave-clear-banner" class="hidden">
+      <h2 id="wave-clear-title">Wave Cleared!</h2>
+      <p id="wave-clear-subtitle">Next wave in <span id="wave-clear-seconds">5</span>s&hellip;</p>
+    </div>
+
+    <div id="field-prep-pill" class="hidden">
+      <span id="field-prep-pill-text">25s</span>
+    </div>
+
+    <button id="reopen-shop-btn" class="hidden">Open Shop</button>
+
+    <div id="defense-select-bar" class="hidden">
+      <p id="defense-select-title">Defense selected</p>
+      <div id="defense-select-actions">
+        <button id="defense-select-move-btn" class="btn-secondary">Move</button>
+        <button id="defense-select-rotate-btn" class="btn-secondary hidden">Rotate &#8635;</button>
+        <button id="defense-select-repair-btn" class="btn-secondary hidden">Repair</button>
+        <button id="defense-select-upgrade-btn" class="btn-secondary hidden">Upgrade</button>
+        <button id="defense-select-close-btn" class="btn-secondary">Close</button>
+      </div>
+    </div>
+
+    <div id="gameover-overlay" class="hidden">
+      <div id="gameover-panel">
+        <h1>The Ward Has Fallen</h1>
+        <p>You held the line through wave <span id="final-wave">1</span>.</p>
+        <p id="marks-earned" class="hidden"></p>
+        <button id="restart-btn">Restart</button>
+      </div>
+    </div>
+
+    <div id="pause-overlay" class="hidden">
+      <div id="pause-panel">
+        <h2>The Hunt Pauses</h2>
+        <div class="pause-actions">
+          <button id="resume-btn">Resume the Hunt</button>
+          <button id="save-quit-btn" class="btn-secondary">Save &amp; Quit to Menu</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="start-overlay">
+      <div id="start-panel">
+        <h1>Nightward</h1>
+        <p>You are the last demon hunter standing between the ward and the night. Zombies, vampires, and werewolves rise in waves — slay them, gather gold, and arm yourself between hunts.</p>
+        <ul class="controls-list">
+          <li><b>Left thumb</b> — drag to move</li>
+          <li><b>Right thumb</b> — drag to aim &amp; fire</li>
+          <li class="controls-list-desktop"><b>WASD/mouse</b> — desktop fallback</li>
+        </ul>
+        <div id="meta-panel">
+          <div id="meta-marks">Marks: <span id="marks-amount">0</span></div>
+          <h3 class="shop-section-title">Starting Weapon</h3>
+          <div id="loadout-items"></div>
+          <div id="checkpoint-section" class="hidden">
+            <h3 class="shop-section-title">Starting Point</h3>
+            <div id="checkpoint-items"></div>
+          </div>
+        </div>
+        <div id="start-actions">
+          <button id="continue-btn" class="hidden">Continue</button>
+          <button id="start-btn">Start Game</button>
+        </div>
+      </div>
+    </div>
+   </div>
+  </div>
+
+  <script src="src/vendor/three.min.js"></script>
+  <!-- Real (Blender-exported) model support: GLTFLoader only ships as an ES module, so it needs
+       its own module-scoped copy of Three.js (three.module.js) alongside the classic-script
+       three.min.js the rest of the game uses — the two coexist fine since Three.js identifies
+       its own objects by duck-typed flags (isMesh, isObject3D, ...) rather than instanceof
+       checks against one specific module's class references. The bootstrap below exposes the
+       loader as a plain global (window.GLTFLoader) so render3d.js, still a classic script, can
+       use it the same way it already uses the global THREE — but module scripts are *always*
+       deferred until every classic script below has finished running, no matter where in the
+       document they're written, so by the time this actually executes, game.js has already
+       constructed Renderer3D. It fires a 'gltfloader-ready' event specifically so
+       Renderer3D._preloadGLTFAssets (render3d.js) can listen for it instead of assuming the
+       global is already there. -->
+  <script type="importmap">
+    { "imports": { "three": "./src/vendor/three.module.js" } }
+  </script>
+  <script type="module">
+    import { GLTFLoader } from './src/vendor/GLTFLoader.js';
+    window.GLTFLoader = GLTFLoader;
+    window.dispatchEvent(new Event('gltfloader-ready'));
+  </script>
+  <script src="src/vector.js?v=20260822a"></script>
+  <script src="src/input.js?v=20260822a"></script>
+  <script src="src/weapons.js?v=20260822a"></script>
+  <script src="src/defenses.js?v=20260822a"></script>
+  <script src="src/effects.js?v=20260822a"></script>
+  <script src="src/entities.js?v=20260822a"></script>
+  <script src="src/waves.js?v=20260822a"></script>
+  <script src="src/shop.js?v=20260822a"></script>
+  <script src="src/save.js?v=20260822a"></script>
+  <script src="src/audio.js?v=20260822a"></script>
+  <script src="src/render3d.js?v=20260822a"></script>
+  <script src="src/game.js?v=20260822a"></script>
+</body>
+</html>
