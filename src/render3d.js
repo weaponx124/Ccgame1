@@ -20,6 +20,20 @@
 // instead of popping to some unrelated fixed height the instant it spawns.
 const PLAYER_MUZZLE_HEIGHT = 64;
 
+// Real (Blender-exported) held-weapon models, filled in one weapon at a time — anything not
+// listed here just keeps using its procedural model (see _buildWeaponVisual), so this is meant to
+// be an incremental, never all-or-nothing upgrade path. Each entry:
+//   url:       path to the exported .glb, dropped anywhere under src/assets/models/.
+//   scale:     converts the model's own units (Blender's default is meters) into this game's
+//              arbitrary world units — start around 20 (roughly "1 Blender meter of height reads
+//              as a human-sized character here") and tune from there.
+//   rotationY: corrects for Blender's default "front" facing (-Y in Blender's own viewport) vs.
+//              this game's rig convention of local +X as forward (see yawFromAngle above) —
+//              Math.PI / 2 is the usual fix for a model built facing Blender's default front.
+// Example, once you've exported one:
+//   revolver: { url: 'src/assets/models/revolver.glb', scale: 20, rotationY: Math.PI / 2 },
+const GLTF_WEAPON_ASSETS = {};
+
 class Renderer3D {
   constructor(canvas, bounds, dpr) {
     this.bounds = bounds;
@@ -70,6 +84,51 @@ class Renderer3D {
     this.explosionViews = new Map();
     this.bloodDecals = new Map();
     this.hitSparkViews = new Map();
+
+    this._gltfCache = {}; // weaponType -> THREE.Group (loaded) | 'loading' | 'error'
+    this._preloadGLTFAssets();
+  }
+
+  /** Kicks off every configured real-model load once, up front, rather than on first use — by
+   *  the time a player actually reaches gameplay (clicks Start, gets through the shop) these small
+   *  files have almost always already finished fetching, so _buildWeaponVisual's fallback to the
+   *  procedural model in the meantime is rarely actually seen in practice. window.GLTFLoader is
+   *  set by a <script type="module"> in index.html — module scripts are *always* deferred until
+   *  after every classic script (including this one) has already run, so it's never actually
+   *  there yet at Renderer3D construction time; this waits for the 'gltfloader-ready' event that
+   *  bootstrap fires instead of just checking once and silently giving up. */
+  _preloadGLTFAssets() {
+    const keys = Object.keys(GLTF_WEAPON_ASSETS);
+    if (!keys.length) return;
+    if (!window.GLTFLoader) {
+      window.addEventListener('gltfloader-ready', () => this._preloadGLTFAssets(), { once: true });
+      return;
+    }
+    const loader = new window.GLTFLoader();
+    for (const key of keys) {
+      const asset = GLTF_WEAPON_ASSETS[key];
+      this._gltfCache[key] = 'loading';
+      loader.load(
+        asset.url,
+        (gltf) => {
+          const model = gltf.scene;
+          model.scale.setScalar(asset.scale || 1);
+          model.rotation.y = asset.rotationY || 0;
+          model.traverse((obj) => {
+            if (obj.isMesh) {
+              obj.castShadow = true;
+              obj.receiveShadow = true;
+            }
+          });
+          this._gltfCache[key] = model;
+        },
+        undefined,
+        (err) => {
+          console.warn(`Nightward: failed to load model for "${key}" (${asset.url}) — falling back to the procedural model.`, err);
+          this._gltfCache[key] = 'error';
+        }
+      );
+    }
   }
 
   /** A one-time, one-way downgrade: drops shadow casting (the dominant draw-call cost, per prior
@@ -937,6 +996,14 @@ class Renderer3D {
    *  muzzleReach so its forward-most point (barrel tip, launcher mouth) lands at or near the same
    *  world position bullets actually spawn from, regardless of how long or short that weapon reads. */
   _buildWeaponVisual(weaponType, muzzleReach) {
+    // A real exported model wins over the procedural one the moment it's finished loading (see
+    // GLTF_WEAPON_ASSETS/_preloadGLTFAssets above) — .clone() because the same loaded THREE.Group
+    // would otherwise be shared (and fought over) by every place that equips this weapon.
+    const loaded = this._gltfCache[weaponType];
+    if (loaded && loaded !== 'loading' && loaded !== 'error') {
+      return loaded.clone();
+    }
+
     const group = new THREE.Group();
     const metalMat = Renderer3D._toonMat({ color: 0x8a8a94, roughness: 0.4, metalness: 0.6 });
     const darkMetalMat = Renderer3D._toonMat({ color: 0x5a5a62, roughness: 0.45, metalness: 0.65 });

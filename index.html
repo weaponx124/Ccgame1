@@ -11,7 +11,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260818o">
+<link rel="stylesheet" href="style.css?v=20260818p">
 </head>
 <body>
   <div id="rotate-overlay">
@@ -156,17 +156,37 @@
   </div>
 
   <script src="src/vendor/three.min.js"></script>
-  <script src="src/vector.js?v=20260818o"></script>
-  <script src="src/input.js?v=20260818o"></script>
-  <script src="src/weapons.js?v=20260818o"></script>
-  <script src="src/defenses.js?v=20260818o"></script>
-  <script src="src/effects.js?v=20260818o"></script>
-  <script src="src/entities.js?v=20260818o"></script>
-  <script src="src/waves.js?v=20260818o"></script>
-  <script src="src/shop.js?v=20260818o"></script>
-  <script src="src/save.js?v=20260818o"></script>
-  <script src="src/audio.js?v=20260818o"></script>
-  <script src="src/render3d.js?v=20260818o"></script>
-  <script src="src/game.js?v=20260818o"></script>
+  <!-- Real (Blender-exported) model support: GLTFLoader only ships as an ES module, so it needs
+       its own module-scoped copy of Three.js (three.module.js) alongside the classic-script
+       three.min.js the rest of the game uses — the two coexist fine since Three.js identifies
+       its own objects by duck-typed flags (isMesh, isObject3D, ...) rather than instanceof
+       checks against one specific module's class references. The bootstrap below exposes the
+       loader as a plain global (window.GLTFLoader) so render3d.js, still a classic script, can
+       use it the same way it already uses the global THREE — but module scripts are *always*
+       deferred until every classic script below has finished running, no matter where in the
+       document they're written, so by the time this actually executes, game.js has already
+       constructed Renderer3D. It fires a 'gltfloader-ready' event specifically so
+       Renderer3D._preloadGLTFAssets (render3d.js) can listen for it instead of assuming the
+       global is already there. -->
+  <script type="importmap">
+    { "imports": { "three": "./src/vendor/three.module.js" } }
+  </script>
+  <script type="module">
+    import { GLTFLoader } from './src/vendor/GLTFLoader.js';
+    window.GLTFLoader = GLTFLoader;
+    window.dispatchEvent(new Event('gltfloader-ready'));
+  </script>
+  <script src="src/vector.js?v=20260818p"></script>
+  <script src="src/input.js?v=20260818p"></script>
+  <script src="src/weapons.js?v=20260818p"></script>
+  <script src="src/defenses.js?v=20260818p"></script>
+  <script src="src/effects.js?v=20260818p"></script>
+  <script src="src/entities.js?v=20260818p"></script>
+  <script src="src/waves.js?v=20260818p"></script>
+  <script src="src/shop.js?v=20260818p"></script>
+  <script src="src/save.js?v=20260818p"></script>
+  <script src="src/audio.js?v=20260818p"></script>
+  <script src="src/render3d.js?v=20260818p"></script>
+  <script src="src/game.js?v=20260818p"></script>
 </body>
 </html>
