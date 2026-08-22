@@ -1786,11 +1786,47 @@
     debugPlayerWeaponView: () => {
       const v = renderer3d.playerView;
       if (!v || !v.weaponVisual) return null;
+      const box = new THREE.Box3().setFromObject(v.weaponVisual);
+      const size = new THREE.Vector3();
+      box.getSize(size);
+      const center = new THREE.Vector3();
+      box.getCenter(center);
+      const meshes = [];
+      v.weaponVisual.traverse((obj) => {
+        if (obj.isMesh || obj.isSprite) {
+          const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+          const wp = new THREE.Vector3();
+          obj.getWorldPosition(wp);
+          meshes.push({
+            name: obj.name,
+            type: obj.type,
+            visible: obj.visible,
+            worldPos: wp.toArray(),
+            worldScale: obj.getWorldScale(new THREE.Vector3()).toArray(),
+            materialTypes: mats.map((m) => m.type),
+            materialColors: mats.map((m) => m.color ? m.color.getHexString() : null),
+            emissive: mats.map((m) => m.emissive ? m.emissive.getHexString() : null),
+            hasGradientMap: mats.map((m) => !!m.gradientMap),
+          });
+        }
+      });
       return {
         equippedWeaponTag: v.equippedWeaponTag,
         childCount: v.weaponVisual.children.length,
         childGeoTypes: v.weaponVisual.children.map((c) => c.geometry ? c.geometry.type : c.type),
+        worldBoxSize: size.toArray(),
+        worldBoxCenter: center.toArray(),
+        weaponPivotPos: v.weaponPivot.position.toArray(),
+        muzzleReach: v.muzzleReach,
+        meshes,
       };
+    },
+    debugCloseUpCamera: () => {
+      const p = renderer3d.playerView.group.position;
+      renderer3d.camera.position.set(p.x + 15, p.y + 35, p.z + 45);
+      renderer3d.camera.lookAt(p.x, p.y + 40, p.z);
+      renderer3d.camera.fov = 18;
+      renderer3d.camera.updateProjectionMatrix();
     },
     debugSetPrepCountdown: (s) => { prepCountdown = s; },
     debugSetWaveClearTimer: (s) => { waveClearTimer = s; },

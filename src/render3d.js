@@ -30,9 +30,9 @@ const PLAYER_MUZZLE_HEIGHT = 64;
 //   rotationY: corrects for Blender's default "front" facing (-Y in Blender's own viewport) vs.
 //              this game's rig convention of local +X as forward (see yawFromAngle above) —
 //              Math.PI / 2 is the usual fix for a model built facing Blender's default front.
-// Example, once you've exported one:
-//   revolver: { url: 'src/assets/models/revolver.glb', scale: 20, rotationY: Math.PI / 2 },
-const GLTF_WEAPON_ASSETS = {};
+const GLTF_WEAPON_ASSETS = {
+  revolver: { url: 'src/assets/models/revolver.glb', scale: 2.7, rotationY: Math.PI / 2 },
+};
 
 class Renderer3D {
   constructor(canvas, bounds, dpr) {
@@ -112,12 +112,50 @@ class Renderer3D {
         asset.url,
         (gltf) => {
           const model = gltf.scene;
+
+          // At this game's actual on-screen scale, a real model's fine geometric detail (barrel
+          // taper, cylinder, hammer...) reads as a thin gray line — every procedural weapon
+          // compensates with a bold emissive tip glow (see addTipGlow in _buildWeaponVisual), so a
+          // real asset needs the same treatment or it's the one weapon in the game that's hard to
+          // even see. Find the muzzle end generically from the model's own raw bounding box
+          // (before scale/rotation are applied) — whichever end of its longest axis sits farther
+          // from the origin, since the origin is expected to be the grip per the asset README —
+          // so this works for any future weapon without per-asset tuning.
+          const rawBox = new THREE.Box3().setFromObject(model);
+          const rawSize = rawBox.getSize(new THREE.Vector3());
+          const rawCenter = rawBox.getCenter(new THREE.Vector3());
+          const axis = rawSize.x >= rawSize.y && rawSize.x >= rawSize.z ? 'x' : (rawSize.y >= rawSize.z ? 'y' : 'z');
+          const tipPoint = rawCenter.clone();
+          tipPoint[axis] = Math.abs(rawBox.max[axis]) > Math.abs(rawBox.min[axis]) ? rawBox.max[axis] : rawBox.min[axis];
+
+          const tipMat = Renderer3D._toonMat({ color: 0xf0d98c, emissive: 0xf0d98c, emissiveIntensity: 1.6 });
+          const tip = new THREE.Mesh(Renderer3D._geo().sphere, tipMat);
+          tip.scale.setScalar(Math.max(rawSize.x, rawSize.y, rawSize.z) * 0.06);
+          tip.position.copy(tipPoint);
+          tip.userData.isGlowTip = true; // skip the material-conversion pass below
+          model.add(tip);
+          const glow = this._makeGlowSprite(0xf0d98c, Math.max(rawSize.x, rawSize.y, rawSize.z) * 0.35, 0.85);
+          glow.position.copy(tipPoint);
+          model.add(glow);
+
           model.scale.setScalar(asset.scale || 1);
           model.rotation.y = asset.rotationY || 0;
           model.traverse((obj) => {
-            if (obj.isMesh) {
+            if (obj.isMesh && !obj.userData.isGlowTip) {
               obj.castShadow = true;
               obj.receiveShadow = true;
+              // Imported materials are plain MeshStandardMaterial with no toon-band clamp, unlike
+              // every procedural weapon (all built via _toonMat) — under this game's moonlit
+              // lighting + high tone-mapping exposure, that lets a real material blow straight to
+              // flat white where a toon one physically can't. Rebuilding it through the same
+              // gradient-mapped pipeline keeps a real asset visually consistent with everything
+              // else instead of overexposing on arrival.
+              const srcMats = Array.isArray(obj.material) ? obj.material : [obj.material];
+              const toonMats = srcMats.map((m) => Renderer3D._toonMat({
+                color: m.color ? m.color.clone() : 0xffffff,
+                map: m.map || null,
+              }));
+              obj.material = Array.isArray(obj.material) ? toonMats : toonMats[0];
             }
           });
           this._gltfCache[key] = model;
