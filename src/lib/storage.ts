@@ -1,4 +1,4 @@
-import type { AppData } from "../types";
+import type { AppData, Job } from "../types";
 
 const KEY = "yardbook:data:v1";
 
@@ -18,10 +18,11 @@ export function loadData(): AppData {
     const raw = localStorage.getItem(KEY);
     if (!raw) return { version: 1, customers: [], jobs: [], settings: defaultSettings };
     const parsed = JSON.parse(raw);
+    const jobs: Job[] = (parsed.jobs ?? []).map((j: Job) => ({ ...j, type: j.type ?? "mowing" }));
     return {
       version: 1,
       customers: parsed.customers ?? [],
-      jobs: parsed.jobs ?? [],
+      jobs,
       settings: { ...defaultSettings, ...(parsed.settings ?? {}) },
     };
   } catch {

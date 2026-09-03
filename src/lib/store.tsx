@@ -91,7 +91,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       markJobDone(id) {
         setData((prev) => ({
           ...prev,
-          jobs: prev.jobs.map((j) => (j.id === id ? { ...j, status: "done" } : j)),
+          jobs: prev.jobs.map((j) =>
+            j.id === id ? { ...j, status: "done", completedDate: j.completedDate ?? new Date().toISOString().slice(0, 10) } : j,
+          ),
         }));
       },
 

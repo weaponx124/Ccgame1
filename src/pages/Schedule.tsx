@@ -3,14 +3,17 @@ import { Link } from "react-router-dom";
 import { useStore } from "../lib/store";
 import { addDays, fromISODate, toISODate, todayISO } from "../lib/dates";
 import { formatMoney } from "../lib/dates";
-import { Card, EmptyState, SecondaryButton } from "../components/ui";
+import { Badge, Card, EmptyState, SecondaryButton } from "../components/ui";
 import { ContactButtons } from "../components/ContactButtons";
-import { CalendarIcon, CheckIcon, ChevronLeftIcon, SkipIcon } from "../components/icons";
+import { JobEditModal } from "../components/JobEditModal";
+import { CalendarIcon, CheckIcon, ChevronLeftIcon, EditIcon, SkipIcon } from "../components/icons";
+import { JOB_TYPE_LABELS, type Job } from "../types";
 
 export default function Schedule() {
-  const { customers, jobs, markJobDone, updateJob, refreshSchedule } = useStore();
+  const { customers, jobs, markJobDone, updateJob, deleteJob, refreshSchedule } = useStore();
   const [weekOffset, setWeekOffset] = useState(0);
   const [justGenerated, setJustGenerated] = useState<number | null>(null);
+  const [editingJob, setEditingJob] = useState<Job | null>(null);
 
   const customerById = useMemo(() => new Map(customers.map((c) => [c.id, c])), [customers]);
 
@@ -71,6 +74,7 @@ export default function Schedule() {
           {justGenerated > 0 ? `Added ${justGenerated} upcoming visit${justGenerated > 1 ? "s" : ""}.` : "Schedule is already up to date."}
         </p>
       )}
+      <p className="text-xs text-bark-600 -mt-2">Tap the pencil on any visit to move it to a different day.</p>
 
       <div className="flex items-center justify-between">
         <button
@@ -124,10 +128,18 @@ export default function Schedule() {
                           <p className="text-sm text-bark-600 truncate">
                             {customer.address || "No address"} · {formatMoney(job.amount)}
                           </p>
+                          <Badge>{JOB_TYPE_LABELS[job.type]}</Badge>
                         </Link>
                         {job.status === "scheduled" ? (
                           <>
                             <ContactButtons customer={customer} size="sm" />
+                            <button
+                              onClick={() => setEditingJob(job)}
+                              className="rounded-full bg-bark-100 text-bark-600 p-2 hover:bg-bark-100/70 transition shrink-0"
+                              aria-label="Edit visit"
+                            >
+                              <EditIcon className="h-4 w-4" />
+                            </button>
                             <button
                               onClick={() => updateJob(job.id, { status: "skipped" })}
                               className="rounded-full bg-bark-100 text-bark-600 p-2 hover:bg-bark-100/70 transition shrink-0"
@@ -144,9 +156,18 @@ export default function Schedule() {
                             </button>
                           </>
                         ) : (
-                          <span className="text-xs font-semibold text-moss-700 bg-moss-100 rounded-full px-2.5 py-1 shrink-0">
-                            Done
-                          </span>
+                          <>
+                            <span className="text-xs font-semibold text-moss-700 bg-moss-100 rounded-full px-2.5 py-1 shrink-0">
+                              Done
+                            </span>
+                            <button
+                              onClick={() => setEditingJob(job)}
+                              className="rounded-full bg-bark-100 text-bark-600 p-2 hover:bg-bark-100/70 transition shrink-0"
+                              aria-label="Edit visit"
+                            >
+                              <EditIcon className="h-4 w-4" />
+                            </button>
+                          </>
                         )}
                       </div>
                     );
@@ -157,6 +178,21 @@ export default function Schedule() {
           );
         })}
       </div>
+
+      {editingJob && (
+        <JobEditModal
+          job={editingJob}
+          onClose={() => setEditingJob(null)}
+          onSave={(patch) => {
+            updateJob(editingJob.id, patch);
+            setEditingJob(null);
+          }}
+          onDelete={() => {
+            deleteJob(editingJob.id);
+            setEditingJob(null);
+          }}
+        />
+      )}
     </div>
   );
 }

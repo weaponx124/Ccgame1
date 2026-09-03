@@ -34,6 +34,16 @@ export interface Customer {
 
 export type JobStatus = "scheduled" | "done" | "skipped";
 
+export type JobType = "mowing" | "shrub-trim" | "fertilizer" | "cleanup" | "other";
+
+export const JOB_TYPE_LABELS: Record<JobType, string> = {
+  mowing: "Mowing",
+  "shrub-trim": "Shrub trim",
+  fertilizer: "Fertilizer",
+  cleanup: "Cleanup",
+  other: "Other",
+};
+
 export type PaymentMethod = "cash" | "check" | "venmo" | "zelle" | "cashapp" | "card" | "other";
 
 export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
@@ -49,9 +59,11 @@ export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
 export interface Job {
   id: string;
   customerId: string;
-  date: string; // ISO yyyy-mm-dd
+  date: string; // ISO yyyy-mm-dd — scheduled date
+  type: JobType;
   status: JobStatus;
   amount: number;
+  completedDate?: string; // ISO — actual date the work was done, may differ from `date`
   paid: boolean;
   paidDate?: string;
   paymentMethod?: PaymentMethod;

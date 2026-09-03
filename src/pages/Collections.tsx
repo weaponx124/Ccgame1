@@ -6,7 +6,7 @@ import { daysBetween, formatMoney, formatShort, todayISO } from "../lib/dates";
 import { Badge, Card, EmptyState, SecondaryButton } from "../components/ui";
 import { ContactButtons } from "../components/ContactButtons";
 import { CashIcon, CheckIcon } from "../components/icons";
-import { PAYMENT_METHOD_LABELS, type PaymentMethod } from "../types";
+import { JOB_TYPE_LABELS, PAYMENT_METHOD_LABELS, type PaymentMethod } from "../types";
 
 export default function Collections() {
   const { customers, jobs, settings, markJobPaid } = useStore();
@@ -87,6 +87,16 @@ export default function Collections() {
                     <Badge>New</Badge>
                   )}
                 </div>
+              </div>
+              <div className="mt-3 space-y-1">
+                {jobList.map((job) => (
+                  <div key={job.id} className="flex items-center justify-between text-xs text-bark-600">
+                    <span>
+                      {formatShort(job.date)} · {JOB_TYPE_LABELS[job.type]}
+                    </span>
+                    <span>{formatMoney(job.amount)}</span>
+                  </div>
+                ))}
               </div>
               <div className="flex items-center gap-2 mt-3">
                 <ContactButtons

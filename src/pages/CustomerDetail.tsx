@@ -3,10 +3,18 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { useStore } from "../lib/store";
 import { Badge, Card, PrimaryButton, SecondaryButton } from "../components/ui";
 import { ContactButtons } from "../components/ContactButtons";
+import { JobEditModal } from "../components/JobEditModal";
 import { buildReminderMessage } from "../lib/contact";
-import { formatFriendly, formatMoney, todayISO } from "../lib/dates";
-import { FREQUENCY_LABELS, PAYMENT_METHOD_LABELS, type PaymentMethod } from "../types";
-import { CheckIcon, ChevronLeftIcon, PlusIcon, SkipIcon } from "../components/icons";
+import { formatFriendly, formatMoney, formatShort, todayISO } from "../lib/dates";
+import {
+  FREQUENCY_LABELS,
+  JOB_TYPE_LABELS,
+  PAYMENT_METHOD_LABELS,
+  type Job,
+  type JobType,
+  type PaymentMethod,
+} from "../types";
+import { CheckIcon, ChevronLeftIcon, EditIcon, PlusIcon, SkipIcon } from "../components/icons";
 
 export default function CustomerDetail() {
   const { id } = useParams();
@@ -14,6 +22,7 @@ export default function CustomerDetail() {
   const { customers, jobs, settings, addJob, markJobDone, markJobPaid, updateJob, deleteJob } = useStore();
   const [showAddJob, setShowAddJob] = useState(false);
   const [payingJobId, setPayingJobId] = useState<string | null>(null);
+  const [editingJob, setEditingJob] = useState<Job | null>(null);
 
   const customer = customers.find((c) => c.id === id);
   const customerJobs = useMemo(
@@ -115,8 +124,8 @@ export default function CustomerDetail() {
       {showAddJob && (
         <AddJobRow
           defaultAmount={customer.rate}
-          onAdd={(date, amount) => {
-            addJob({ customerId: customer.id, date, amount, status: "scheduled", paid: false, notes: "" });
+          onAdd={(date, type, amount) => {
+            addJob({ customerId: customer.id, date, type, amount, status: "scheduled", paid: false, notes: "" });
             setShowAddJob(false);
           }}
           onCancel={() => setShowAddJob(false)}
@@ -131,8 +140,17 @@ export default function CustomerDetail() {
             <div key={job.id} className="flex items-center gap-3 p-3.5">
               <div className="min-w-0 flex-1">
                 <p className="font-medium text-moss-900">{formatFriendly(job.date)}</p>
-                <p className="text-sm text-bark-600">{formatMoney(job.amount)}</p>
+                <p className="text-sm text-bark-600">
+                  {JOB_TYPE_LABELS[job.type]} · {formatMoney(job.amount)}
+                </p>
               </div>
+              <button
+                onClick={() => setEditingJob(job)}
+                className="rounded-full bg-bark-100 text-bark-600 p-2 hover:bg-bark-100/70 transition"
+                aria-label="Edit visit"
+              >
+                <EditIcon className="h-4 w-4" />
+              </button>
               <button
                 onClick={() => updateJob(job.id, { status: "skipped" })}
                 className="rounded-full bg-bark-100 text-bark-600 p-2 hover:bg-bark-100/70 transition"
@@ -160,11 +178,17 @@ export default function CustomerDetail() {
           {past.map((job) => (
             <div key={job.id} className="flex items-center gap-3 p-3.5">
               <div className="min-w-0 flex-1">
-                <p className="font-medium text-moss-900">{formatFriendly(job.date)}</p>
+                <p className="font-medium text-moss-900">
+                  {JOB_TYPE_LABELS[job.type]}
+                  {job.status === "done" && job.completedDate && job.completedDate !== job.date
+                    ? ` · done ${formatShort(job.completedDate)}`
+                    : ` · ${formatFriendly(job.date)}`}
+                </p>
                 <p className="text-sm text-bark-600">
                   {formatMoney(job.amount)}
                   {job.status === "skipped" && " · Skipped"}
-                  {job.paid && job.paymentMethod && ` · Paid via ${PAYMENT_METHOD_LABELS[job.paymentMethod]}`}
+                  {job.paid && job.paidDate && ` · Paid ${formatShort(job.paidDate)}`}
+                  {job.paid && job.paymentMethod && ` via ${PAYMENT_METHOD_LABELS[job.paymentMethod]}`}
                 </p>
               </div>
               {job.status === "done" ? (
@@ -181,6 +205,13 @@ export default function CustomerDetail() {
               ) : job.status === "skipped" ? (
                 <Badge>Skipped</Badge>
               ) : null}
+              <button
+                onClick={() => setEditingJob(job)}
+                className="rounded-full bg-bark-100 text-bark-600 p-2 hover:bg-bark-100/70 transition"
+                aria-label="Edit visit"
+              >
+                <EditIcon className="h-3.5 w-3.5" />
+              </button>
               <button
                 onClick={() => deleteJob(job.id)}
                 className="text-xs text-bark-600/60 hover:text-rust-500 px-1"
@@ -202,6 +233,21 @@ export default function CustomerDetail() {
           }}
         />
       )}
+
+      {editingJob && (
+        <JobEditModal
+          job={editingJob}
+          onClose={() => setEditingJob(null)}
+          onSave={(patch) => {
+            updateJob(editingJob.id, patch);
+            setEditingJob(null);
+          }}
+          onDelete={() => {
+            deleteJob(editingJob.id);
+            setEditingJob(null);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -212,10 +258,11 @@ function AddJobRow({
   onCancel,
 }: {
   defaultAmount: number;
-  onAdd: (date: string, amount: number) => void;
+  onAdd: (date: string, type: JobType, amount: number) => void;
   onCancel: () => void;
 }) {
   const [date, setDate] = useState(todayISO());
+  const [type, setType] = useState<JobType>("mowing");
   const [amount, setAmount] = useState(defaultAmount);
   return (
     <Card className="p-4 mb-3 space-y-3">
@@ -239,8 +286,22 @@ function AddJobRow({
           />
         </label>
       </div>
+      <label className="block">
+        <span className="block text-xs font-medium text-bark-600 mb-1">Job type</span>
+        <select
+          value={type}
+          onChange={(e) => setType(e.target.value as JobType)}
+          className="w-full rounded-xl border border-bark-100 px-3 py-2 text-sm"
+        >
+          {Object.entries(JOB_TYPE_LABELS).map(([value, label]) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
+        </select>
+      </label>
       <div className="flex gap-2">
-        <PrimaryButton className="flex-1" onClick={() => onAdd(date, amount)}>
+        <PrimaryButton className="flex-1" onClick={() => onAdd(date, type, amount)}>
           Add
         </PrimaryButton>
         <SecondaryButton onClick={onCancel}>Cancel</SecondaryButton>

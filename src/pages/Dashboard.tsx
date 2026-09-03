@@ -1,15 +1,18 @@
 import { Link } from "react-router-dom";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useStore } from "../lib/store";
 import { totalOwed } from "../lib/contact";
 import { formatFriendly, formatMoney, todayISO } from "../lib/dates";
 import { Card, EmptyState, PrimaryButton, Badge } from "../components/ui";
 import { ContactButtons } from "../components/ContactButtons";
-import { CalendarIcon, CashIcon, CheckIcon, PlusIcon, UsersIcon } from "../components/icons";
+import { JobEditModal } from "../components/JobEditModal";
+import { CalendarIcon, CashIcon, CheckIcon, EditIcon, PlusIcon, UsersIcon } from "../components/icons";
+import { JOB_TYPE_LABELS, type Job } from "../types";
 
 export default function Dashboard() {
-  const { customers, jobs, markJobDone } = useStore();
+  const { customers, jobs, markJobDone, updateJob, deleteJob } = useStore();
   const today = todayISO();
+  const [editingJob, setEditingJob] = useState<Job | null>(null);
 
   const customerById = useMemo(() => new Map(customers.map((c) => [c.id, c])), [customers]);
 
@@ -108,8 +111,16 @@ export default function Dashboard() {
                     <p className="text-sm text-bark-600 truncate">
                       {customer.address || "No address"} · {formatMoney(job.amount)}
                     </p>
+                    <Badge>{JOB_TYPE_LABELS[job.type]}</Badge>
                   </Link>
                   <ContactButtons customer={customer} size="sm" />
+                  <button
+                    onClick={() => setEditingJob(job)}
+                    className="rounded-full bg-bark-100 text-bark-600 p-2.5 hover:bg-bark-100/70 transition shrink-0"
+                    aria-label="Edit visit"
+                  >
+                    <EditIcon className="h-4 w-4" />
+                  </button>
                   <button
                     onClick={() => markJobDone(job.id)}
                     className="rounded-full bg-moss-700 text-white p-2.5 hover:bg-moss-800 transition shrink-0"
@@ -135,21 +146,41 @@ export default function Dashboard() {
                 const customer = customerById.get(job.customerId);
                 if (!customer) return null;
                 return (
-                  <Link
-                    key={job.id}
-                    to={`/customers/${customer.id}`}
-                    className="flex items-center gap-3 p-3.5 first:rounded-t-2xl last:rounded-b-2xl hover:bg-bark-50/60 transition"
-                  >
-                    <div className="min-w-0 flex-1">
+                  <div key={job.id} className="flex items-center gap-3 p-3.5 first:rounded-t-2xl last:rounded-b-2xl">
+                    <Link to={`/customers/${customer.id}`} className="min-w-0 flex-1">
                       <p className="font-medium text-moss-900 truncate">{customer.name}</p>
-                      <p className="text-sm text-bark-600 truncate">{formatMoney(job.amount)}</p>
-                    </div>
+                      <p className="text-sm text-bark-600 truncate">
+                        {JOB_TYPE_LABELS[job.type]} · {formatMoney(job.amount)}
+                      </p>
+                    </Link>
                     <Badge>{formatFriendly(job.date)}</Badge>
-                  </Link>
+                    <button
+                      onClick={() => setEditingJob(job)}
+                      className="rounded-full bg-bark-100 text-bark-600 p-2 hover:bg-bark-100/70 transition shrink-0"
+                      aria-label="Edit visit"
+                    >
+                      <EditIcon className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 );
               })}
           </Card>
         </section>
+      )}
+
+      {editingJob && (
+        <JobEditModal
+          job={editingJob}
+          onClose={() => setEditingJob(null)}
+          onSave={(patch) => {
+            updateJob(editingJob.id, patch);
+            setEditingJob(null);
+          }}
+          onDelete={() => {
+            deleteJob(editingJob.id);
+            setEditingJob(null);
+          }}
+        />
       )}
     </div>
   );

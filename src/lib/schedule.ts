@@ -36,6 +36,7 @@ export function generateUpcomingJobs(customers: Customer[], jobs: Job[], weeksAh
           id: makeId(),
           customerId: customer.id,
           date: iso,
+          type: "mowing",
           status: "scheduled",
           amount: customer.rate,
           paid: false,
