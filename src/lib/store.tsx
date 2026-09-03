@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { AppData, Customer, Job, Settings } from "../types";
-import { loadData, saveData } from "./storage";
+import { loadData, normalizeData, saveData } from "./storage";
 import { generateUpcomingJobs } from "./schedule";
 import { makeId } from "./id";
 
@@ -18,6 +18,7 @@ interface StoreValue {
   markJobPaid: (id: string, method?: Job["paymentMethod"]) => void;
   updateSettings: (patch: Partial<Settings>) => void;
   refreshSchedule: (weeksAhead?: number) => number;
+  importData: (raw: unknown) => { customers: number; jobs: number };
 }
 
 const StoreContext = createContext<StoreValue | null>(null);
@@ -123,6 +124,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           setData((prev) => ({ ...prev, jobs: [...prev.jobs, ...fresh] }));
         }
         return fresh.length;
+      },
+
+      importData(raw) {
+        const normalized = normalizeData(raw);
+        setData(normalized);
+        return { customers: normalized.customers.length, jobs: normalized.jobs.length };
       },
     }),
     [data],

@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
 import { useStore } from "../lib/store";
-import { Card } from "./ui";
+import { Card, SecondaryButton } from "./ui";
 import { addDays, formatMoney, formatShort, fromISODate, startOfWeek, toISODate, todayISO } from "../lib/dates";
+import { downloadCSV, toCSV } from "../lib/csv";
 import { JOB_TYPE_LABELS, PAYMENT_METHOD_LABELS, type JobType, type PaymentMethod } from "../types";
 
 type Preset = "today" | "week" | "2weeks" | "month" | "all" | "custom";
@@ -122,13 +123,43 @@ export function IncomeReport() {
       )}
 
       <Card className="p-4">
-        <p className="text-sm text-bark-600">
-          Collected {preset !== "all" ? `${formatShort(start)} – ${formatShort(end)}` : "all time"}
-        </p>
-        <p className="text-3xl font-semibold text-moss-900 mt-1">{formatMoney(total)}</p>
-        <p className="text-xs text-bark-600 mt-0.5">
-          {paidJobs.length} payment{paidJobs.length === 1 ? "" : "s"}
-        </p>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-sm text-bark-600">
+              Collected {preset !== "all" ? `${formatShort(start)} – ${formatShort(end)}` : "all time"}
+            </p>
+            <p className="text-3xl font-semibold text-moss-900 mt-1">{formatMoney(total)}</p>
+            <p className="text-xs text-bark-600 mt-0.5">
+              {paidJobs.length} payment{paidJobs.length === 1 ? "" : "s"}
+            </p>
+          </div>
+          {paidJobs.length > 0 && (
+            <SecondaryButton
+              className="shrink-0"
+              onClick={() => {
+                const rows = paidJobs.map((j) => ({
+                  paidDate: j.paidDate ?? "",
+                  customer: customerById.get(j.customerId)?.name ?? "Unknown",
+                  type: JOB_TYPE_LABELS[j.type],
+                  amount: j.amount,
+                  method: j.paymentMethod ? PAYMENT_METHOD_LABELS[j.paymentMethod] : "",
+                  scheduledDate: j.date,
+                }));
+                const csv = toCSV(rows, [
+                  { key: "paidDate", label: "Paid Date" },
+                  { key: "customer", label: "Customer" },
+                  { key: "type", label: "Job Type" },
+                  { key: "amount", label: "Amount" },
+                  { key: "method", label: "Payment Method" },
+                  { key: "scheduledDate", label: "Scheduled Date" },
+                ]);
+                downloadCSV(`yardbook-income-${start}-to-${end}.csv`, csv);
+              }}
+            >
+              Export .csv
+            </SecondaryButton>
+          )}
+        </div>
       </Card>
 
       {byMethod.length > 0 && (

@@ -13,20 +13,28 @@ const defaultSettings: AppData["settings"] = {
     "Hi {customer}, this is {business}. Just a friendly reminder that your lawn service on {date} (${amount}) is still open. Thanks so much — let me know if you have any questions!",
 };
 
+/** Coerces arbitrary parsed JSON (a fresh load, or an imported backup file) into a valid AppData shape. */
+export function normalizeData(raw: unknown): AppData {
+  const parsed = (raw ?? {}) as Partial<AppData> & Record<string, unknown>;
+  const jobs: Job[] = (Array.isArray(parsed.jobs) ? (parsed.jobs as Job[]) : []).map((j) => ({
+    ...j,
+    type: j.type ?? "mowing",
+  }));
+  return {
+    version: 1,
+    customers: Array.isArray(parsed.customers) ? parsed.customers : [],
+    jobs,
+    settings: { ...defaultSettings, ...((parsed.settings as Partial<AppData["settings"]>) ?? {}) },
+  };
+}
+
 export function loadData(): AppData {
   try {
     const raw = localStorage.getItem(KEY);
-    if (!raw) return { version: 1, customers: [], jobs: [], settings: defaultSettings };
-    const parsed = JSON.parse(raw);
-    const jobs: Job[] = (parsed.jobs ?? []).map((j: Job) => ({ ...j, type: j.type ?? "mowing" }));
-    return {
-      version: 1,
-      customers: parsed.customers ?? [],
-      jobs,
-      settings: { ...defaultSettings, ...(parsed.settings ?? {}) },
-    };
+    if (!raw) return normalizeData(null);
+    return normalizeData(JSON.parse(raw));
   } catch {
-    return { version: 1, customers: [], jobs: [], settings: defaultSettings };
+    return normalizeData(null);
   }
 }
 
