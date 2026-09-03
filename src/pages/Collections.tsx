@@ -1,0 +1,150 @@
+import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import { useStore } from "../lib/store";
+import { buildReminderMessage, totalOwed } from "../lib/contact";
+import { daysBetween, formatMoney, formatShort, todayISO } from "../lib/dates";
+import { Badge, Card, EmptyState, SecondaryButton } from "../components/ui";
+import { ContactButtons } from "../components/ContactButtons";
+import { CashIcon, CheckIcon } from "../components/icons";
+import { PAYMENT_METHOD_LABELS, type PaymentMethod } from "../types";
+
+export default function Collections() {
+  const { customers, jobs, settings, markJobPaid } = useStore();
+  const [payingCustomerId, setPayingCustomerId] = useState<string | null>(null);
+
+  const groups = useMemo(() => {
+    const byCustomer = new Map<string, typeof jobs>();
+    for (const job of jobs) {
+      if (job.status === "done" && !job.paid) {
+        const list = byCustomer.get(job.customerId) ?? [];
+        list.push(job);
+        byCustomer.set(job.customerId, list);
+      }
+    }
+    const result = [];
+    for (const [customerId, jobList] of byCustomer) {
+      const customer = customers.find((c) => c.id === customerId);
+      if (!customer) continue;
+      jobList.sort((a, b) => a.date.localeCompare(b.date));
+      const total = jobList.reduce((s, j) => s + j.amount, 0);
+      const oldest = jobList[0].date;
+      result.push({ customer, jobs: jobList, total, oldest });
+    }
+    result.sort((a, b) => a.oldest.localeCompare(b.oldest));
+    return result;
+  }, [jobs, customers]);
+
+  const owed = totalOwed(jobs);
+
+  if (groups.length === 0) {
+    return (
+      <div className="p-4 md:p-8 max-w-2xl mx-auto">
+        <h1 className="text-2xl font-semibold text-moss-900 mb-4">Collections</h1>
+        <EmptyState
+          icon={<CashIcon className="h-12 w-12" />}
+          title="All caught up"
+          body="Nobody owes you money right now. Nice."
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-4 md:p-8 max-w-2xl mx-auto space-y-4">
+      <div>
+        <h1 className="text-2xl font-semibold text-moss-900">Collections</h1>
+        <p className="text-bark-600 text-sm mt-0.5">
+          {formatMoney(owed)} outstanding across {groups.length} customer{groups.length > 1 ? "s" : ""}
+        </p>
+      </div>
+
+      <div className="space-y-3">
+        {groups.map(({ customer, jobs: jobList, total, oldest }) => {
+          const daysOverdue = daysBetween(oldest, todayISO());
+          const msg = buildReminderMessage(customer, settings, {
+            amount: total,
+            jobCount: jobList.length,
+            oldestDate: oldest,
+          });
+          return (
+            <Card key={customer.id} className="p-4">
+              <div className="flex items-start gap-3">
+                <Link to={`/customers/${customer.id}`} className="min-w-0 flex-1">
+                  <p className="font-medium text-moss-900">{customer.name}</p>
+                  <p className="text-sm text-bark-600">
+                    {jobList.length} unpaid visit{jobList.length > 1 ? "s" : ""} · since {formatShort(oldest)}
+                  </p>
+                </Link>
+                <div className="text-right shrink-0">
+                  <p className="font-semibold text-rust-600">{formatMoney(total)}</p>
+                  {daysOverdue >= 14 ? (
+                    <Badge tone="rust">{daysOverdue}d</Badge>
+                  ) : daysOverdue >= 7 ? (
+                    <Badge tone="clay">{daysOverdue}d</Badge>
+                  ) : daysOverdue >= 0 ? (
+                    <Badge>{daysOverdue}d</Badge>
+                  ) : (
+                    <Badge>New</Badge>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-2 mt-3">
+                <ContactButtons
+                  customer={customer}
+                  smsBody={msg}
+                  mailSubject={`Lawn service balance — ${formatMoney(total)}`}
+                  mailBody={msg}
+                />
+                <SecondaryButton className="ml-auto" onClick={() => setPayingCustomerId(customer.id)}>
+                  <CheckIcon className="h-4 w-4" /> Mark paid
+                </SecondaryButton>
+              </div>
+            </Card>
+          );
+        })}
+      </div>
+
+      {payingCustomerId && (
+        <PaymentModal
+          onClose={() => setPayingCustomerId(null)}
+          onConfirm={(method) => {
+            const group = groups.find((g) => g.customer.id === payingCustomerId);
+            group?.jobs.forEach((j) => markJobPaid(j.id, method));
+            setPayingCustomerId(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function PaymentModal({
+  onClose,
+  onConfirm,
+}: {
+  onClose: () => void;
+  onConfirm: (method: PaymentMethod) => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-30 bg-black/40 flex items-end md:items-center justify-center p-0 md:p-4">
+      <div className="bg-white rounded-t-2xl md:rounded-2xl w-full md:max-w-sm p-5 safe-bottom">
+        <h3 className="font-semibold text-moss-900 mb-1">Mark all as paid</h3>
+        <p className="text-sm text-bark-600 mb-4">How did they pay?</p>
+        <div className="grid grid-cols-2 gap-2 mb-4">
+          {(Object.keys(PAYMENT_METHOD_LABELS) as PaymentMethod[]).map((method) => (
+            <button
+              key={method}
+              onClick={() => onConfirm(method)}
+              className="rounded-xl bg-bark-50 border border-bark-100 py-3 text-sm font-medium hover:bg-moss-100 hover:border-moss-200 transition"
+            >
+              {PAYMENT_METHOD_LABELS[method]}
+            </button>
+          ))}
+        </div>
+        <SecondaryButton onClick={onClose} className="w-full">
+          Cancel
+        </SecondaryButton>
+      </div>
+    </div>
+  );
+}

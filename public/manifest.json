@@ -1,0 +1,12 @@
+{
+  "name": "YardBook — Job & Payment Tracker",
+  "short_name": "YardBook",
+  "description": "Scheduling, jobs, and payment tracking for a small landscaping crew.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f4f1ea",
+  "theme_color": "#1c3d2e",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

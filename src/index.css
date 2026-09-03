@@ -1,0 +1,59 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+
+  --color-bark-50: #f6f4ef;
+  --color-bark-100: #eee9de;
+  --color-bark-600: #6b5c45;
+  --color-bark-900: #2c2418;
+
+  --color-moss-50: #f1f7f0;
+  --color-moss-100: #dcecd8;
+  --color-moss-200: #b8dab0;
+  --color-moss-400: #6cb35d;
+  --color-moss-500: #4a9639;
+  --color-moss-600: #397a2b;
+  --color-moss-700: #2d6122;
+  --color-moss-800: #1c3d2e;
+  --color-moss-900: #142c21;
+
+  --color-clay-400: #e8a24a;
+  --color-clay-500: #db8b2b;
+  --color-clay-600: #b5711f;
+
+  --color-rust-400: #e2694f;
+  --color-rust-500: #d1502f;
+  --color-rust-600: #b13d21;
+}
+
+html {
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  background: var(--color-bark-50);
+  color: var(--color-moss-900);
+  min-height: 100dvh;
+  overscroll-behavior-y: none;
+}
+
+* {
+  -webkit-font-smoothing: antialiased;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-bark-100);
+  border-radius: 8px;
+}
+
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.safe-top {
+  padding-top: env(safe-area-inset-top);
+}
