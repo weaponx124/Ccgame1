@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { useMemo, useState } from "react";
-import { useStore } from "../lib/store";
+import { useStore } from "../lib/storeContext";
 import { totalOwed } from "../lib/contact";
 import { formatFriendly, formatMoney, todayISO } from "../lib/dates";
 import { Card, EmptyState, PrimaryButton, Badge } from "../components/ui";
@@ -10,7 +10,8 @@ import { CalendarIcon, CashIcon, CheckIcon, EditIcon, PlusIcon, UsersIcon } from
 import { JOB_TYPE_LABELS, type Job } from "../types";
 
 export default function Dashboard() {
-  const { customers, jobs, markJobDone, updateJob, deleteJob } = useStore();
+  const { customers, jobs, markJobDone, updateJob, deleteJob, role } = useStore();
+  const isOwner = role === "owner";
   const today = todayISO();
   const [editingJob, setEditingJob] = useState<Job | null>(null);
 
@@ -36,13 +37,19 @@ export default function Dashboard() {
         <EmptyState
           icon={<UsersIcon className="h-12 w-12" />}
           title="Welcome to YardBook"
-          body="Add your first customer to start building your schedule and tracking payments."
+          body={
+            isOwner
+              ? "Add your first customer to start building your schedule and tracking payments."
+              : "No customers yet — check back once the schedule is set up."
+          }
           action={
-            <Link to="/customers/new">
-              <PrimaryButton>
-                <PlusIcon className="h-4 w-4" /> Add your first customer
-              </PrimaryButton>
-            </Link>
+            isOwner ? (
+              <Link to="/customers/new">
+                <PrimaryButton>
+                  <PlusIcon className="h-4 w-4" /> Add your first customer
+                </PrimaryButton>
+              </Link>
+            ) : undefined
           }
         />
       </div>
@@ -61,20 +68,22 @@ export default function Dashboard() {
         </p>
       </div>
 
-      <div className="grid grid-cols-3 gap-3">
+      <div className={`grid gap-3 ${isOwner ? "grid-cols-3" : "grid-cols-2"}`}>
         <StatCard icon={<CalendarIcon className="h-5 w-5" />} label="Today" value={String(todaysJobs.length)} />
         <StatCard icon={<CheckIcon className="h-5 w-5" />} label="This week" value={String(weekJobs.length)} />
-        <Link to="/collections">
-          <StatCard
-            icon={<CashIcon className="h-5 w-5" />}
-            label="Owed"
-            value={formatMoney(owed)}
-            tone={owed > 0 ? "rust" : "moss"}
-          />
-        </Link>
+        {isOwner && (
+          <Link to="/collections">
+            <StatCard
+              icon={<CashIcon className="h-5 w-5" />}
+              label="Owed"
+              value={formatMoney(owed)}
+              tone={owed > 0 ? "rust" : "moss"}
+            />
+          </Link>
+        )}
       </div>
 
-      {unpaidCustomers > 0 && (
+      {isOwner && unpaidCustomers > 0 && (
         <Link to="/collections">
           <Card className="p-4 flex items-center gap-3 border-rust-500/30 bg-rust-500/5">
             <div className="h-10 w-10 rounded-full bg-rust-500/15 text-rust-600 flex items-center justify-center shrink-0">
@@ -114,13 +123,15 @@ export default function Dashboard() {
                     <Badge>{JOB_TYPE_LABELS[job.type]}</Badge>
                   </Link>
                   <ContactButtons customer={customer} size="sm" />
-                  <button
-                    onClick={() => setEditingJob(job)}
-                    className="rounded-full bg-bark-100 text-bark-600 p-2.5 hover:bg-bark-100/70 transition shrink-0"
-                    aria-label="Edit visit"
-                  >
-                    <EditIcon className="h-4 w-4" />
-                  </button>
+                  {isOwner && (
+                    <button
+                      onClick={() => setEditingJob(job)}
+                      className="rounded-full bg-bark-100 text-bark-600 p-2.5 hover:bg-bark-100/70 transition shrink-0"
+                      aria-label="Edit visit"
+                    >
+                      <EditIcon className="h-4 w-4" />
+                    </button>
+                  )}
                   <button
                     onClick={() => markJobDone(job.id)}
                     className="rounded-full bg-moss-700 text-white p-2.5 hover:bg-moss-800 transition shrink-0"
@@ -154,13 +165,15 @@ export default function Dashboard() {
                       </p>
                     </Link>
                     <Badge>{formatFriendly(job.date)}</Badge>
-                    <button
-                      onClick={() => setEditingJob(job)}
-                      className="rounded-full bg-bark-100 text-bark-600 p-2 hover:bg-bark-100/70 transition shrink-0"
-                      aria-label="Edit visit"
-                    >
-                      <EditIcon className="h-3.5 w-3.5" />
-                    </button>
+                    {isOwner && (
+                      <button
+                        onClick={() => setEditingJob(job)}
+                        className="rounded-full bg-bark-100 text-bark-600 p-2 hover:bg-bark-100/70 transition shrink-0"
+                        aria-label="Edit visit"
+                      >
+                        <EditIcon className="h-3.5 w-3.5" />
+                      </button>
+                    )}
                   </div>
                 );
               })}

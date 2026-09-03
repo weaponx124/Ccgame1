@@ -1,33 +1,12 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import type { AppData, Customer, Expense, Job, Settings } from "../types";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import type { AppData, Customer, Expense, Job } from "../types";
 import { loadData, normalizeData, saveData } from "./storage";
 import { generateUpcomingJobs } from "./schedule";
 import { makeId } from "./id";
+import { StoreContext, type StoreValue } from "./storeContext";
 
-interface StoreValue {
-  customers: Customer[];
-  jobs: Job[];
-  expenses: Expense[];
-  settings: Settings;
-  addCustomer: (c: Omit<Customer, "id" | "createdAt">) => Customer;
-  updateCustomer: (id: string, patch: Partial<Customer>) => void;
-  deleteCustomer: (id: string) => void;
-  addJob: (j: Omit<Job, "id">) => Job;
-  updateJob: (id: string, patch: Partial<Job>) => void;
-  deleteJob: (id: string) => void;
-  markJobDone: (id: string) => void;
-  markJobPaid: (id: string, method?: Job["paymentMethod"]) => void;
-  updateSettings: (patch: Partial<Settings>) => void;
-  refreshSchedule: (weeksAhead?: number) => number;
-  importData: (raw: unknown) => { customers: number; jobs: number };
-  addExpense: (input: Omit<Expense, "id" | "linkedJobId">) => Expense;
-  updateExpense: (id: string, patch: Partial<Expense>) => void;
-  deleteExpense: (id: string) => void;
-}
-
-const StoreContext = createContext<StoreValue | null>(null);
-
-export function StoreProvider({ children }: { children: ReactNode }) {
+/** Everything lives in this browser's localStorage — no account, no sync, single device. */
+export function LocalStoreProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<AppData>(() => loadData());
 
   useEffect(() => {
@@ -46,6 +25,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<StoreValue>(
     () => ({
+      role: "owner",
       customers: data.customers,
       jobs: data.jobs,
       expenses: data.expenses,
@@ -98,7 +78,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setData((prev) => ({
           ...prev,
           jobs: prev.jobs.map((j) =>
-            j.id === id ? { ...j, status: "done", completedDate: j.completedDate ?? new Date().toISOString().slice(0, 10) } : j,
+            j.id === id
+              ? { ...j, status: "done", completedDate: j.completedDate ?? new Date().toISOString().slice(0, 10) }
+              : j,
           ),
         }));
       },
@@ -206,10 +188,4 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   );
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
-}
-
-export function useStore(): StoreValue {
-  const ctx = useContext(StoreContext);
-  if (!ctx) throw new Error("useStore must be used within StoreProvider");
-  return ctx;
 }

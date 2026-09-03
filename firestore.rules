@@ -1,0 +1,61 @@
+rules_version = '2';
+
+// Paste this into Firebase console → Firestore Database → Rules → Publish.
+//
+// Two roles, both set up manually by the owner (there is no self-signup):
+//   owner — full read/write on everything
+//   crew  — can read customers/jobs, and can only update a job's
+//           completion/payment fields, never its price, date, or the
+//           customer it belongs to. Cannot read expenses or settings at all.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function myRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function isOwner() {
+      return signedIn() && myRole() == 'owner';
+    }
+
+    function isCrew() {
+      return signedIn() && myRole() == 'crew';
+    }
+
+    function isTeam() {
+      return isOwner() || isCrew();
+    }
+
+    // Each user's own role record. Managed by the owner directly in the
+    // Firebase console (Firestore → users collection), not from the app.
+    match /users/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow write: if false;
+    }
+
+    match /customers/{id} {
+      allow read: if isTeam();
+      allow write: if isOwner();
+    }
+
+    match /jobs/{id} {
+      allow read: if isTeam();
+      allow create, delete: if isOwner();
+      allow update: if isOwner() ||
+        (isCrew() && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['status', 'paid', 'paidDate', 'paymentMethod', 'completedDate', 'notes']));
+    }
+
+    // Money in/out and payment-handle settings stay owner-only.
+    match /expenses/{id} {
+      allow read, write: if isOwner();
+    }
+
+    match /settings/{id} {
+      allow read, write: if isOwner();
+    }
+  }
+}

@@ -1,5 +1,6 @@
 import { Route, Routes } from "react-router-dom";
 import Layout from "./components/Layout";
+import { RequireOwner } from "./components/RequireOwner";
 import Dashboard from "./pages/Dashboard";
 import Customers from "./pages/Customers";
 import CustomerDetail from "./pages/CustomerDetail";
@@ -15,11 +16,39 @@ export default function App() {
         <Route path="/" element={<Dashboard />} />
         <Route path="/schedule" element={<Schedule />} />
         <Route path="/customers" element={<Customers />} />
-        <Route path="/customers/new" element={<CustomerForm />} />
+        <Route
+          path="/customers/new"
+          element={
+            <RequireOwner>
+              <CustomerForm />
+            </RequireOwner>
+          }
+        />
         <Route path="/customers/:id" element={<CustomerDetail />} />
-        <Route path="/customers/:id/edit" element={<CustomerForm />} />
-        <Route path="/collections" element={<Collections />} />
-        <Route path="/settings" element={<Settings />} />
+        <Route
+          path="/customers/:id/edit"
+          element={
+            <RequireOwner>
+              <CustomerForm />
+            </RequireOwner>
+          }
+        />
+        <Route
+          path="/collections"
+          element={
+            <RequireOwner>
+              <Collections />
+            </RequireOwner>
+          }
+        />
+        <Route
+          path="/settings"
+          element={
+            <RequireOwner>
+              <Settings />
+            </RequireOwner>
+          }
+        />
       </Route>
     </Routes>
   );

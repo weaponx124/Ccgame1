@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { useStore } from "../lib/store";
+import { useStore } from "../lib/storeContext";
 import { Badge, Card, PrimaryButton, SecondaryButton } from "../components/ui";
 import { ContactButtons } from "../components/ContactButtons";
 import { JobEditModal } from "../components/JobEditModal";
@@ -19,7 +19,8 @@ import { CheckIcon, ChevronLeftIcon, EditIcon, PlusIcon, SkipIcon } from "../com
 export default function CustomerDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { customers, jobs, settings, addJob, markJobDone, markJobPaid, updateJob, deleteJob } = useStore();
+  const { customers, jobs, settings, addJob, markJobDone, markJobPaid, updateJob, deleteJob, role } = useStore();
+  const isOwner = role === "owner";
   const [showAddJob, setShowAddJob] = useState(false);
   const [payingJobId, setPayingJobId] = useState<string | null>(null);
   const [editingJob, setEditingJob] = useState<Job | null>(null);
@@ -75,9 +76,11 @@ export default function CustomerDetail() {
           </p>
           {customer.address && <p className="text-sm text-bark-600">{customer.address}</p>}
         </div>
-        <Link to={`/customers/${customer.id}/edit`}>
-          <SecondaryButton type="button">Edit</SecondaryButton>
-        </Link>
+        {isOwner && (
+          <Link to={`/customers/${customer.id}/edit`}>
+            <SecondaryButton type="button">Edit</SecondaryButton>
+          </Link>
+        )}
       </div>
 
       <div className="flex items-center gap-2 mb-5">
@@ -113,12 +116,14 @@ export default function CustomerDetail() {
 
       <div className="flex items-center justify-between mb-2">
         <h2 className="font-semibold text-moss-900">Upcoming</h2>
-        <button
-          onClick={() => setShowAddJob((v) => !v)}
-          className="flex items-center gap-1 text-sm text-moss-700 font-medium"
-        >
-          <PlusIcon className="h-3.5 w-3.5" /> Add visit
-        </button>
+        {isOwner && (
+          <button
+            onClick={() => setShowAddJob((v) => !v)}
+            className="flex items-center gap-1 text-sm text-moss-700 font-medium"
+          >
+            <PlusIcon className="h-3.5 w-3.5" /> Add visit
+          </button>
+        )}
       </div>
 
       {showAddJob && (
@@ -144,13 +149,15 @@ export default function CustomerDetail() {
                   {JOB_TYPE_LABELS[job.type]} · {formatMoney(job.amount)}
                 </p>
               </div>
-              <button
-                onClick={() => setEditingJob(job)}
-                className="rounded-full bg-bark-100 text-bark-600 p-2 hover:bg-bark-100/70 transition"
-                aria-label="Edit visit"
-              >
-                <EditIcon className="h-4 w-4" />
-              </button>
+              {isOwner && (
+                <button
+                  onClick={() => setEditingJob(job)}
+                  className="rounded-full bg-bark-100 text-bark-600 p-2 hover:bg-bark-100/70 transition"
+                  aria-label="Edit visit"
+                >
+                  <EditIcon className="h-4 w-4" />
+                </button>
+              )}
               <button
                 onClick={() => updateJob(job.id, { status: "skipped" })}
                 className="rounded-full bg-bark-100 text-bark-600 p-2 hover:bg-bark-100/70 transition"
@@ -205,20 +212,24 @@ export default function CustomerDetail() {
               ) : job.status === "skipped" ? (
                 <Badge>Skipped</Badge>
               ) : null}
-              <button
-                onClick={() => setEditingJob(job)}
-                className="rounded-full bg-bark-100 text-bark-600 p-2 hover:bg-bark-100/70 transition"
-                aria-label="Edit visit"
-              >
-                <EditIcon className="h-3.5 w-3.5" />
-              </button>
-              <button
-                onClick={() => deleteJob(job.id)}
-                className="text-xs text-bark-600/60 hover:text-rust-500 px-1"
-                aria-label="Remove"
-              >
-                ✕
-              </button>
+              {isOwner && (
+                <>
+                  <button
+                    onClick={() => setEditingJob(job)}
+                    className="rounded-full bg-bark-100 text-bark-600 p-2 hover:bg-bark-100/70 transition"
+                    aria-label="Edit visit"
+                  >
+                    <EditIcon className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    onClick={() => deleteJob(job.id)}
+                    className="text-xs text-bark-600/60 hover:text-rust-500 px-1"
+                    aria-label="Remove"
+                  >
+                    ✕
+                  </button>
+                </>
+              )}
             </div>
           ))}
         </Card>

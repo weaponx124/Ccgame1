@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useStore } from "../lib/store";
+import { useStore } from "../lib/storeContext";
 import { Card, Badge, SecondaryButton, PrimaryButton, EmptyState } from "./ui";
 import { PeriodPicker } from "./PeriodPicker";
 import { ExpenseForm } from "./ExpenseForm";

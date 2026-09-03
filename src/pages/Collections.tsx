@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { useStore } from "../lib/store";
+import { useStore } from "../lib/storeContext";
 import { buildReminderMessage, totalOwed } from "../lib/contact";
 import { daysBetween, formatMoney, formatShort, todayISO } from "../lib/dates";
 import { Badge, Card, EmptyState, SecondaryButton } from "../components/ui";

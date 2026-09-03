@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { useStore } from "../lib/store";
+import { useStore } from "../lib/storeContext";
 import type { Customer, Frequency } from "../types";
 import { FREQUENCY_LABELS, WEEKDAY_LABELS } from "../types";
 import { PrimaryButton, SecondaryButton } from "../components/ui";

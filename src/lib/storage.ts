@@ -2,7 +2,7 @@ import type { AppData, Job } from "../types";
 
 const KEY = "yardbook:data:v1";
 
-const defaultSettings: AppData["settings"] = {
+export const defaultSettings: AppData["settings"] = {
   businessName: "",
   ownerName: "",
   ownerPhone: "",

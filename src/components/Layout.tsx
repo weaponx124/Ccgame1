@@ -1,20 +1,24 @@
 import { NavLink, Outlet } from "react-router-dom";
 import { CalendarIcon, CashIcon, GearIcon, HomeIcon, UsersIcon } from "./icons";
-import { useStore } from "../lib/store";
+import { useStore } from "../lib/storeContext";
+import { useAuthOptional } from "../lib/auth";
 import { totalOwed } from "../lib/contact";
 
-const NAV_ITEMS = [
-  { to: "/", label: "Home", icon: HomeIcon, end: true },
-  { to: "/schedule", label: "Schedule", icon: CalendarIcon, end: false },
-  { to: "/customers", label: "Customers", icon: UsersIcon, end: false },
-  { to: "/collections", label: "Money", icon: CashIcon, end: false },
-  { to: "/settings", label: "Settings", icon: GearIcon, end: false },
+const ALL_NAV_ITEMS = [
+  { to: "/", label: "Home", icon: HomeIcon, end: true, ownerOnly: false },
+  { to: "/schedule", label: "Schedule", icon: CalendarIcon, end: false, ownerOnly: false },
+  { to: "/customers", label: "Customers", icon: UsersIcon, end: false, ownerOnly: false },
+  { to: "/collections", label: "Money", icon: CashIcon, end: false, ownerOnly: true },
+  { to: "/settings", label: "Settings", icon: GearIcon, end: false, ownerOnly: true },
 ];
 
 export default function Layout() {
-  const { jobs } = useStore();
-  const owed = totalOwed(jobs);
-  const owedCount = jobs.filter((j) => j.status === "done" && !j.paid).length;
+  const { jobs, role } = useStore();
+  const auth = useAuthOptional();
+  const isOwner = role === "owner";
+  const navItems = ALL_NAV_ITEMS.filter((item) => isOwner || !item.ownerOnly);
+  const owed = isOwner ? totalOwed(jobs) : 0;
+  const owedCount = isOwner ? jobs.filter((j) => j.status === "done" && !j.paid).length : 0;
 
   return (
     <div className="min-h-dvh bg-bark-50 text-moss-900 flex flex-col md:flex-row">
@@ -25,10 +29,12 @@ export default function Layout() {
           </div>
           <div>
             <p className="font-semibold leading-tight">YardBook</p>
-            <p className="text-xs text-bark-600 leading-tight">job &amp; payment tracker</p>
+            <p className="text-xs text-bark-600 leading-tight">
+              {isOwner ? "job & payment tracker" : "crew view"}
+            </p>
           </div>
         </div>
-        {NAV_ITEMS.map(({ to, label, icon: Icon, end }) => (
+        {navItems.map(({ to, label, icon: Icon, end }) => (
           <NavLink
             key={to}
             to={to}
@@ -56,16 +62,29 @@ export default function Layout() {
             </p>
           </div>
         )}
+        {auth && (
+          <button
+            onClick={() => auth.logout()}
+            className={`text-sm text-bark-600 hover:text-moss-800 px-3 py-2 text-left ${owed > 0 ? "" : "mt-auto"}`}
+          >
+            Sign out{auth.name ? ` (${auth.name})` : ""}
+          </button>
+        )}
       </aside>
 
       <div className="flex-1 flex flex-col min-w-0">
         <header className="md:hidden safe-top sticky top-0 z-20 bg-moss-800 text-moss-50 px-4 py-3 flex items-center gap-2 shadow-sm">
           <div className="h-7 w-7 rounded-lg bg-moss-600 flex items-center justify-center text-xs font-bold">Y</div>
-          <span className="font-semibold">YardBook</span>
+          <span className="font-semibold">YardBook{!isOwner ? " · Crew" : ""}</span>
           {owedCount > 0 && (
             <span className="ml-auto text-xs font-semibold bg-rust-500 rounded-full px-2 py-1">
               {owedCount} unpaid
             </span>
+          )}
+          {auth && (
+            <button onClick={() => auth.logout()} className={owedCount > 0 ? "text-xs ml-2 underline" : "ml-auto text-xs underline"}>
+              Sign out
+            </button>
           )}
         </header>
 
@@ -74,8 +93,8 @@ export default function Layout() {
         </main>
 
         <nav className="md:hidden fixed bottom-0 inset-x-0 z-20 bg-white border-t border-bark-100 safe-bottom">
-          <div className="grid grid-cols-5">
-            {NAV_ITEMS.map(({ to, label, icon: Icon, end }) => (
+          <div className="grid" style={{ gridTemplateColumns: `repeat(${navItems.length}, minmax(0, 1fr))` }}>
+            {navItems.map(({ to, label, icon: Icon, end }) => (
               <NavLink
                 key={to}
                 to={to}

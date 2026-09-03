@@ -10,7 +10,21 @@ A simple job-and-payment tracker built for a small landscaping crew (this one: t
 - **Dashboard** — today's jobs, this week's jobs, and total money owed at a glance.
 - **Settings** — business name, payment handles, and an editable reminder message template. Data can be exported as a JSON backup at any time.
 
-All data is stored locally in the browser (`localStorage`) — nothing leaves the device. Add the page to your phone's home screen (Safari/Chrome "Add to Home Screen") for an app-like experience.
+By default, all data is stored locally in the browser (`localStorage`) — nothing leaves the device, no login required. Add the page to your phone's home screen (Safari/Chrome "Add to Home Screen") for an app-like experience.
+
+## Optional: shared cloud mode (owner + crew)
+
+If a `.env` with Firebase config is present (see `.env.example`), the app switches to a shared mode instead: data syncs through Firestore so multiple phones see the same live schedule, and each person signs in as either **owner** (full access) or **crew** (can see jobs, mark them done, and record payment received — no access to Income, Expenses, or Settings, enforced by `firestore.rules`, not just hidden in the UI).
+
+Setup, once:
+1. Create a Firebase project → enable **Firestore Database** and **Authentication → Email/Password**.
+2. Copy `.env.example` to `.env` and fill in the web app config from the Firebase console.
+3. In the Firebase console, paste `firestore.rules` into **Firestore Database → Rules → Publish**.
+4. Under **Authentication**, manually add an account for each person (email + password) — there's no self-signup.
+5. Under **Firestore Database**, create a `users` collection with one document per person, **document ID = that person's Auth UID**, containing `{ role: "owner" | "crew", name: "..." }`.
+6. If you have existing local data, export a backup from Settings before switching, then use **Settings → Restore from backup** once signed in as owner to push it into Firestore.
+
+Leaving `.env` unset (or deleting it) reverts the app to local-only, single-device mode — nothing else changes.
 
 ## Development
 

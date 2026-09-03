@@ -1,13 +1,14 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { useStore } from "../lib/store";
+import { useStore } from "../lib/storeContext";
 import { Badge, Card, EmptyState, PrimaryButton } from "../components/ui";
 import { PlusIcon, SearchIcon, UsersIcon } from "../components/icons";
 import { FREQUENCY_LABELS } from "../types";
 import { formatMoney } from "../lib/dates";
 
 export default function Customers() {
-  const { customers, jobs } = useStore();
+  const { customers, jobs, role } = useStore();
+  const isOwner = role === "owner";
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"all" | "active" | "contract">("all");
 
@@ -39,24 +40,28 @@ export default function Customers() {
     <div className="p-4 md:p-8 max-w-3xl mx-auto space-y-4">
       <div className="flex items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold text-moss-900">Customers</h1>
-        <Link to="/customers/new">
-          <PrimaryButton>
-            <PlusIcon className="h-4 w-4" /> Add
-          </PrimaryButton>
-        </Link>
+        {isOwner && (
+          <Link to="/customers/new">
+            <PrimaryButton>
+              <PlusIcon className="h-4 w-4" /> Add
+            </PrimaryButton>
+          </Link>
+        )}
       </div>
 
       {customers.length === 0 ? (
         <EmptyState
           icon={<UsersIcon className="h-12 w-12" />}
           title="No customers yet"
-          body="Add your regulars, one-time jobs, and your commercial contract."
+          body={isOwner ? "Add your regulars, one-time jobs, and your commercial contract." : undefined}
           action={
-            <Link to="/customers/new">
-              <PrimaryButton>
-                <PlusIcon className="h-4 w-4" /> Add a customer
-              </PrimaryButton>
-            </Link>
+            isOwner ? (
+              <Link to="/customers/new">
+                <PrimaryButton>
+                  <PlusIcon className="h-4 w-4" /> Add a customer
+                </PrimaryButton>
+              </Link>
+            ) : undefined
           }
         />
       ) : (
