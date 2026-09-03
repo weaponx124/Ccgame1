@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import type { AppData, Customer, Job, Settings } from "../types";
+import type { AppData, Customer, Expense, Job, Settings } from "../types";
 import { loadData, normalizeData, saveData } from "./storage";
 import { generateUpcomingJobs } from "./schedule";
 import { makeId } from "./id";
@@ -7,6 +7,7 @@ import { makeId } from "./id";
 interface StoreValue {
   customers: Customer[];
   jobs: Job[];
+  expenses: Expense[];
   settings: Settings;
   addCustomer: (c: Omit<Customer, "id" | "createdAt">) => Customer;
   updateCustomer: (id: string, patch: Partial<Customer>) => void;
@@ -19,6 +20,9 @@ interface StoreValue {
   updateSettings: (patch: Partial<Settings>) => void;
   refreshSchedule: (weeksAhead?: number) => number;
   importData: (raw: unknown) => { customers: number; jobs: number };
+  addExpense: (input: Omit<Expense, "id" | "linkedJobId">) => Expense;
+  updateExpense: (id: string, patch: Partial<Expense>) => void;
+  deleteExpense: (id: string) => void;
 }
 
 const StoreContext = createContext<StoreValue | null>(null);
@@ -44,6 +48,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     () => ({
       customers: data.customers,
       jobs: data.jobs,
+      expenses: data.expenses,
       settings: data.settings,
 
       addCustomer(c) {
@@ -130,6 +135,71 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const normalized = normalizeData(raw);
         setData(normalized);
         return { customers: normalized.customers.length, jobs: normalized.jobs.length };
+      },
+
+      addExpense(input) {
+        const expense: Expense = { ...input, id: makeId() };
+        let job: Job | undefined;
+        if (expense.billable && expense.customerId) {
+          job = {
+            id: makeId(),
+            customerId: expense.customerId,
+            date: expense.date,
+            type: "materials",
+            status: "done",
+            completedDate: expense.date,
+            amount: expense.billAmount ?? expense.amount,
+            paid: false,
+            notes: expense.description,
+          };
+          expense.linkedJobId = job.id;
+        }
+        const finalJob = job;
+        setData((prev) => ({
+          ...prev,
+          expenses: [...prev.expenses, expense],
+          jobs: finalJob ? [...prev.jobs, finalJob] : prev.jobs,
+        }));
+        return expense;
+      },
+
+      updateExpense(id, patch) {
+        setData((prev) => {
+          const expense = prev.expenses.find((e) => e.id === id);
+          if (!expense) return prev;
+          const updated = { ...expense, ...patch };
+          const jobs = updated.linkedJobId
+            ? prev.jobs.map((j) =>
+                j.id === updated.linkedJobId && !j.paid
+                  ? {
+                      ...j,
+                      date: updated.date,
+                      amount: updated.billAmount ?? updated.amount,
+                      notes: updated.description,
+                    }
+                  : j,
+              )
+            : prev.jobs;
+          return {
+            ...prev,
+            jobs,
+            expenses: prev.expenses.map((e) => (e.id === id ? updated : e)),
+          };
+        });
+      },
+
+      deleteExpense(id) {
+        setData((prev) => {
+          const expense = prev.expenses.find((e) => e.id === id);
+          const jobs = expense?.linkedJobId
+            ? prev.jobs.filter((j) => !(j.id === expense.linkedJobId && !j.paid))
+            : prev.jobs;
+          return {
+            ...prev,
+            jobs,
+            expenses: prev.expenses.filter((e) => e.id !== id),
+          };
+        });
       },
     }),
     [data],

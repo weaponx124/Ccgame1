@@ -152,6 +152,15 @@ export function SkipIcon(props: IconProps) {
   );
 }
 
+export function ReceiptIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M6 3h12v18l-3-2-3 2-3-2-3 2Z" />
+      <path d="M9 8h6M9 12h6M9 16h3" />
+    </svg>
+  );
+}
+
 export function EditIcon(props: IconProps) {
   return (
     <svg {...base} {...props}>

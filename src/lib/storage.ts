@@ -24,6 +24,7 @@ export function normalizeData(raw: unknown): AppData {
     version: 1,
     customers: Array.isArray(parsed.customers) ? parsed.customers : [],
     jobs,
+    expenses: Array.isArray(parsed.expenses) ? parsed.expenses : [],
     settings: { ...defaultSettings, ...((parsed.settings as Partial<AppData["settings"]>) ?? {}) },
   };
 }

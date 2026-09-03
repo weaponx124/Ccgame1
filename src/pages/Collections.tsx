@@ -6,10 +6,11 @@ import { daysBetween, formatMoney, formatShort, todayISO } from "../lib/dates";
 import { Badge, Card, EmptyState, SecondaryButton } from "../components/ui";
 import { ContactButtons } from "../components/ContactButtons";
 import { IncomeReport } from "../components/IncomeReport";
+import { ExpensesReport } from "../components/ExpensesReport";
 import { CashIcon, CheckIcon } from "../components/icons";
 import { JOB_TYPE_LABELS, PAYMENT_METHOD_LABELS, type PaymentMethod } from "../types";
 
-type Tab = "owed" | "income";
+type Tab = "owed" | "income" | "expenses";
 
 export default function Collections() {
   const { customers, jobs, settings, markJobPaid } = useStore();
@@ -43,7 +44,7 @@ export default function Collections() {
   return (
     <div className="p-4 md:p-8 max-w-2xl mx-auto space-y-4">
       <div>
-        <h1 className="text-2xl font-semibold text-moss-900">Collections</h1>
+        <h1 className="text-2xl font-semibold text-moss-900">Money</h1>
         {tab === "owed" && (
           <p className="text-bark-600 text-sm mt-0.5">
             {formatMoney(owed)} outstanding across {groups.length} customer{groups.length === 1 ? "" : "s"}
@@ -67,6 +68,14 @@ export default function Collections() {
           }`}
         >
           Income
+        </button>
+        <button
+          onClick={() => setTab("expenses")}
+          className={`rounded-full px-3.5 py-1.5 text-sm font-medium transition ${
+            tab === "expenses" ? "bg-moss-700 text-white" : "bg-bark-100 text-bark-600"
+          }`}
+        >
+          Expenses
         </button>
       </div>
 
@@ -134,8 +143,10 @@ export default function Collections() {
             })}
           </div>
         )
-      ) : (
+      ) : tab === "income" ? (
         <IncomeReport />
+      ) : (
+        <ExpensesReport />
       )}
 
       {payingCustomerId && (

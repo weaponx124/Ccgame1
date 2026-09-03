@@ -3,10 +3,10 @@ import { useStore } from "../lib/store";
 import { Card, PrimaryButton } from "../components/ui";
 import { downloadCSV, toCSV } from "../lib/csv";
 import { todayISO } from "../lib/dates";
-import { FREQUENCY_LABELS, JOB_TYPE_LABELS, PAYMENT_METHOD_LABELS, WEEKDAY_LABELS } from "../types";
+import { EXPENSE_CATEGORY_LABELS, FREQUENCY_LABELS, JOB_TYPE_LABELS, PAYMENT_METHOD_LABELS, WEEKDAY_LABELS } from "../types";
 
 export default function Settings() {
-  const { settings, updateSettings, customers, jobs, importData } = useStore();
+  const { settings, updateSettings, customers, jobs, expenses, importData } = useStore();
   const [form, setForm] = useState(settings);
   const [saved, setSaved] = useState(false);
   const [importMsg, setImportMsg] = useState<string | null>(null);
@@ -24,7 +24,7 @@ export default function Settings() {
   }
 
   function exportBackup() {
-    const blob = new Blob([JSON.stringify({ customers, jobs, settings }, null, 2)], {
+    const blob = new Blob([JSON.stringify({ customers, jobs, expenses, settings }, null, 2)], {
       type: "application/json",
     });
     const url = URL.createObjectURL(blob);
@@ -45,9 +45,12 @@ export default function Settings() {
         const raw = JSON.parse(String(reader.result));
         const custCount = Array.isArray(raw?.customers) ? raw.customers.length : 0;
         const jobCount = Array.isArray(raw?.jobs) ? raw.jobs.length : 0;
+        const expenseCount = Array.isArray(raw?.expenses) ? raw.expenses.length : 0;
         const ok = window.confirm(
-          `This backup has ${custCount} customer${custCount === 1 ? "" : "s"} and ${jobCount} visit${
+          `This backup has ${custCount} customer${custCount === 1 ? "" : "s"}, ${jobCount} visit${
             jobCount === 1 ? "" : "s"
+          }, and ${expenseCount} expense${
+            expenseCount === 1 ? "" : "s"
           }.\n\nRestoring will REPLACE everything currently on this device. Only do this when setting up a new phone. Continue?`,
         );
         if (!ok) return;
@@ -119,6 +122,32 @@ export default function Settings() {
       { key: "notes", label: "Notes" },
     ]);
     downloadCSV(`yardbook-customers-${todayISO()}.csv`, csv);
+  }
+
+  function exportExpensesCSV() {
+    const customerById = new Map(customers.map((c) => [c.id, c]));
+    const rows = expenses
+      .slice()
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .map((e) => ({
+        date: e.date,
+        category: EXPENSE_CATEGORY_LABELS[e.category],
+        description: e.description,
+        amount: e.amount,
+        billable: e.billable ? "Yes" : "No",
+        customer: e.customerId ? customerById.get(e.customerId)?.name ?? "" : "",
+        billAmount: e.billable ? e.billAmount ?? e.amount : "",
+      }));
+    const csv = toCSV(rows, [
+      { key: "date", label: "Date" },
+      { key: "category", label: "Category" },
+      { key: "description", label: "Description" },
+      { key: "amount", label: "Amount" },
+      { key: "billable", label: "Billable" },
+      { key: "customer", label: "Customer" },
+      { key: "billAmount", label: "Billed Amount" },
+    ]);
+    downloadCSV(`yardbook-expenses-${todayISO()}.csv`, csv);
   }
 
   return (
@@ -198,10 +227,13 @@ export default function Settings() {
           <button onClick={exportCustomersCSV} className="text-sm font-medium text-moss-700 underline underline-offset-2">
             Export customer list (.csv)
           </button>
+          <button onClick={exportExpensesCSV} className="text-sm font-medium text-moss-700 underline underline-offset-2">
+            Export all expenses (.csv)
+          </button>
         </div>
         <p className="text-xs text-bark-600 mt-3">
-          For a specific tax period (e.g. a quarter), use Collect → Income instead — it exports only the paid visits
-          in the date range you pick.
+          For a specific tax period (e.g. a quarter), use Money → Income or Money → Expenses instead — those export
+          only what falls in the date range you pick.
         </p>
       </Section>
     </div>

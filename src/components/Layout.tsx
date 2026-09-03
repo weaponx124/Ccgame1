@@ -7,7 +7,7 @@ const NAV_ITEMS = [
   { to: "/", label: "Home", icon: HomeIcon, end: true },
   { to: "/schedule", label: "Schedule", icon: CalendarIcon, end: false },
   { to: "/customers", label: "Customers", icon: UsersIcon, end: false },
-  { to: "/collections", label: "Collect", icon: CashIcon, end: false },
+  { to: "/collections", label: "Money", icon: CashIcon, end: false },
   { to: "/settings", label: "Settings", icon: GearIcon, end: false },
 ];
 
@@ -41,7 +41,7 @@ export default function Layout() {
           >
             <Icon className="h-5 w-5 shrink-0" />
             {label}
-            {label === "Collect" && owedCount > 0 && (
+            {label === "Money" && owedCount > 0 && (
               <span className="ml-auto text-xs font-semibold text-white bg-rust-500 rounded-full px-2 py-0.5">
                 {owedCount}
               </span>
@@ -88,7 +88,7 @@ export default function Layout() {
               >
                 <Icon className="h-5 w-5" />
                 {label}
-                {label === "Collect" && owedCount > 0 && (
+                {label === "Money" && owedCount > 0 && (
                   <span className="absolute top-1 right-[22%] h-2 w-2 rounded-full bg-rust-500" />
                 )}
               </NavLink>

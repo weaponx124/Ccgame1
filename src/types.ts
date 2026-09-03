@@ -34,13 +34,14 @@ export interface Customer {
 
 export type JobStatus = "scheduled" | "done" | "skipped";
 
-export type JobType = "mowing" | "shrub-trim" | "fertilizer" | "cleanup" | "other";
+export type JobType = "mowing" | "shrub-trim" | "fertilizer" | "cleanup" | "materials" | "other";
 
 export const JOB_TYPE_LABELS: Record<JobType, string> = {
   mowing: "Mowing",
   "shrub-trim": "Shrub trim",
   fertilizer: "Fertilizer",
   cleanup: "Cleanup",
+  materials: "Materials",
   other: "Other",
 };
 
@@ -70,6 +71,32 @@ export interface Job {
   notes: string;
 }
 
+export type ExpenseCategory = "fuel" | "equipment" | "materials" | "maintenance" | "insurance" | "other";
+
+export const EXPENSE_CATEGORY_LABELS: Record<ExpenseCategory, string> = {
+  fuel: "Fuel",
+  equipment: "Equipment",
+  materials: "Materials",
+  maintenance: "Maintenance & repairs",
+  insurance: "Insurance",
+  other: "Other",
+};
+
+export interface Expense {
+  id: string;
+  date: string; // ISO yyyy-mm-dd
+  category: ExpenseCategory;
+  amount: number; // what you paid out of pocket
+  description: string;
+  /** True when this cost should be passed on to a customer instead of eaten as overhead. */
+  billable: boolean;
+  customerId?: string;
+  /** What to charge the customer, if billable — defaults to `amount` when unset (no markup). */
+  billAmount?: number;
+  /** The auto-created Job (type "materials") that carries this charge through the normal collect/paid flow. */
+  linkedJobId?: string;
+}
+
 export interface Settings {
   businessName: string;
   ownerName: string;
@@ -84,5 +111,6 @@ export interface AppData {
   version: 1;
   customers: Customer[];
   jobs: Job[];
+  expenses: Expense[];
   settings: Settings;
 }
